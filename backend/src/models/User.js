@@ -111,6 +111,40 @@ const userSchema = new mongoose.Schema(
         type: Boolean,
         default: true,
       },
+      pushNotifications: {
+        type: Boolean,
+        default: true,
+      },
+      notificationTypes: {
+        like: {
+          type: Boolean,
+          default: true,
+        },
+        comment: {
+          type: Boolean,
+          default: true,
+        },
+        topic_vote: {
+          type: Boolean,
+          default: true,
+        },
+        topic_comment: {
+          type: Boolean,
+          default: true,
+        },
+        message: {
+          type: Boolean,
+          default: true,
+        },
+        follow: {
+          type: Boolean,
+          default: true,
+        },
+        system: {
+          type: Boolean,
+          default: true,
+        },
+      },
       privacy: {
         showEmail: {
           type: Boolean,
@@ -129,6 +163,33 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
       default: null,
+    },
+    // Moderation fields
+    suspendedAt: {
+      type: Date,
+      default: null,
+    },
+    suspendedBy: {
+      type: String,
+      trim: true,
+    },
+    suspensionReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Suspension reason cannot exceed 500 characters"],
+    },
+    bannedAt: {
+      type: Date,
+      default: null,
+    },
+    bannedBy: {
+      type: String,
+      trim: true,
+    },
+    banReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Ban reason cannot exceed 500 characters"],
     },
   },
   {

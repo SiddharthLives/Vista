@@ -11,6 +11,12 @@ jest.mock("firebase-admin", () => ({
   auth: jest.fn(() => ({
     verifyIdToken: jest.fn(),
   })),
+  messaging: jest.fn(() => ({
+    send: jest.fn(),
+    sendMulticast: jest.fn(),
+    subscribeToTopic: jest.fn(),
+    unsubscribeFromTopic: jest.fn(),
+  })),
 }));
 
 describe("FirebaseService", () => {
@@ -338,6 +344,371 @@ describe("FirebaseService", () => {
       await expect(
         firebaseService.verifyTokenAndDomain("invalid-token")
       ).rejects.toThrow("Token verification failed");
+    });
+  });
+
+  describe("FCM Methods", () => {
+    beforeEach(() => {
+      admin.messaging.mockReturnValue({
+        send: jest.fn(),
+        sendMulticast: jest.fn(),
+        subscribeToTopic: jest.fn(),
+        unsubscribeFromTopic: jest.fn(),
+      });
+    });
+
+    describe("sendNotificationToDevice", () => {
+      it("should send notification to a single device", async () => {
+        const mockResponse = "projects/test-project/messages/msg-123";
+        admin.messaging().send.mockResolvedValue(mockResponse);
+
+        const notification = { title: "Test Title", body: "Test Body" };
+        const data = { type: "like", postId: "123" };
+
+        const result = await firebaseService.sendNotificationToDevice(
+          "test-token",
+          notification,
+          data
+        );
+
+        expect(admin.messaging().send).toHaveBeenCalledWith({
+          token: "test-token",
+          notification: {
+            title: "Test Title",
+            body: "Test Body",
+          },
+          data: {
+            type: "like",
+            postId: "123",
+            timestamp: expect.any(String),
+          },
+          android: {
+            notification: {
+              icon: "ic_notification",
+              color: "#1976D2",
+              sound: "default",
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
+            },
+          },
+        });
+
+        expect(result).toBe(mockResponse);
+      });
+
+      it("should throw error for missing FCM token", async () => {
+        await expect(
+          firebaseService.sendNotificationToDevice("", { title: "Test" })
+        ).rejects.toThrow("FCM token is required");
+      });
+
+      it("should throw error for missing notification title", async () => {
+        await expect(
+          firebaseService.sendNotificationToDevice("test-token", {})
+        ).rejects.toThrow("Notification title is required");
+      });
+
+      it("should handle invalid registration token error", async () => {
+        const error = new Error("Invalid token");
+        error.code = "messaging/invalid-registration-token";
+        admin.messaging().send.mockRejectedValue(error);
+
+        await expect(
+          firebaseService.sendNotificationToDevice("invalid-token", {
+            title: "Test",
+          })
+        ).rejects.toThrow("Invalid or unregistered FCM token");
+      });
+
+      it("should handle unregistered token error", async () => {
+        const error = new Error("Unregistered token");
+        error.code = "messaging/registration-token-not-registered";
+        admin.messaging().send.mockRejectedValue(error);
+
+        await expect(
+          firebaseService.sendNotificationToDevice("unregistered-token", {
+            title: "Test",
+          })
+        ).rejects.toThrow("Invalid or unregistered FCM token");
+      });
+
+      it("should handle invalid argument error", async () => {
+        const error = new Error("Invalid argument");
+        error.code = "messaging/invalid-argument";
+        admin.messaging().send.mockRejectedValue(error);
+
+        await expect(
+          firebaseService.sendNotificationToDevice("test-token", {
+            title: "Test",
+          })
+        ).rejects.toThrow("Invalid message payload");
+      });
+    });
+
+    describe("sendNotificationToMultipleDevices", () => {
+      it("should send notification to multiple devices", async () => {
+        const mockResponse = {
+          successCount: 2,
+          failureCount: 0,
+          responses: [
+            { success: true, messageId: "msg-1" },
+            { success: true, messageId: "msg-2" },
+          ],
+        };
+        admin.messaging().sendMulticast.mockResolvedValue(mockResponse);
+
+        const tokens = ["token1", "token2"];
+        const notification = { title: "Test Title", body: "Test Body" };
+        const data = { type: "announcement" };
+
+        const result = await firebaseService.sendNotificationToMultipleDevices(
+          tokens,
+          notification,
+          data
+        );
+
+        expect(admin.messaging().sendMulticast).toHaveBeenCalledWith({
+          notification: {
+            title: "Test Title",
+            body: "Test Body",
+          },
+          data: {
+            type: "announcement",
+            timestamp: expect.any(String),
+          },
+          android: {
+            notification: {
+              icon: "ic_notification",
+              color: "#1976D2",
+              sound: "default",
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
+            },
+          },
+          tokens: ["token1", "token2"],
+        });
+
+        expect(result.successCount).toBe(2);
+        expect(result.failureCount).toBe(0);
+        expect(result.invalidTokens).toEqual([]);
+      });
+
+      it("should filter out invalid tokens and extract them from response", async () => {
+        const mockResponse = {
+          successCount: 1,
+          failureCount: 1,
+          responses: [
+            { success: true, messageId: "msg-1" },
+            {
+              success: false,
+              error: { code: "messaging/invalid-registration-token" },
+            },
+          ],
+        };
+        admin.messaging().sendMulticast.mockResolvedValue(mockResponse);
+
+        const tokens = ["valid-token", "invalid-token"];
+        const notification = { title: "Test Title" };
+
+        const result = await firebaseService.sendNotificationToMultipleDevices(
+          tokens,
+          notification
+        );
+
+        expect(result.successCount).toBe(1);
+        expect(result.failureCount).toBe(1);
+        expect(result.invalidTokens).toEqual(["invalid-token"]);
+      });
+
+      it("should throw error for empty tokens array", async () => {
+        await expect(
+          firebaseService.sendNotificationToMultipleDevices([], {
+            title: "Test",
+          })
+        ).rejects.toThrow("FCM tokens array is required and cannot be empty");
+      });
+
+      it("should throw error for no valid tokens", async () => {
+        await expect(
+          firebaseService.sendNotificationToMultipleDevices(
+            [null, "", undefined],
+            { title: "Test" }
+          )
+        ).rejects.toThrow("No valid FCM tokens provided");
+      });
+    });
+
+    describe("sendNotificationToTopic", () => {
+      it("should send notification to topic", async () => {
+        const mockResponse = "projects/test-project/messages/msg-123";
+        admin.messaging().send.mockResolvedValue(mockResponse);
+
+        const notification = {
+          title: "Topic Notification",
+          body: "Topic Body",
+        };
+        const data = { type: "topic_update" };
+
+        const result = await firebaseService.sendNotificationToTopic(
+          "campus-news",
+          notification,
+          data
+        );
+
+        expect(admin.messaging().send).toHaveBeenCalledWith({
+          topic: "campus-news",
+          notification: {
+            title: "Topic Notification",
+            body: "Topic Body",
+          },
+          data: {
+            type: "topic_update",
+            timestamp: expect.any(String),
+          },
+          android: {
+            notification: {
+              icon: "ic_notification",
+              color: "#1976D2",
+              sound: "default",
+            },
+          },
+          apns: {
+            payload: {
+              aps: {
+                sound: "default",
+                badge: 1,
+              },
+            },
+          },
+        });
+
+        expect(result).toBe(mockResponse);
+      });
+
+      it("should throw error for missing topic", async () => {
+        await expect(
+          firebaseService.sendNotificationToTopic("", { title: "Test" })
+        ).rejects.toThrow("Topic name is required");
+      });
+    });
+
+    describe("subscribeToTopic", () => {
+      it("should subscribe tokens to topic", async () => {
+        const mockResponse = { successCount: 2, failureCount: 0 };
+        admin.messaging().subscribeToTopic.mockResolvedValue(mockResponse);
+
+        const tokens = ["token1", "token2"];
+        const topic = "campus-news";
+
+        const result = await firebaseService.subscribeToTopic(tokens, topic);
+
+        expect(admin.messaging().subscribeToTopic).toHaveBeenCalledWith(
+          tokens,
+          topic
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it("should throw error for empty tokens array", async () => {
+        await expect(
+          firebaseService.subscribeToTopic([], "topic")
+        ).rejects.toThrow("Tokens array is required and cannot be empty");
+      });
+
+      it("should throw error for missing topic", async () => {
+        await expect(
+          firebaseService.subscribeToTopic(["token1"], "")
+        ).rejects.toThrow("Topic name is required");
+      });
+    });
+
+    describe("unsubscribeFromTopic", () => {
+      it("should unsubscribe tokens from topic", async () => {
+        const mockResponse = { successCount: 2, failureCount: 0 };
+        admin.messaging().unsubscribeFromTopic.mockResolvedValue(mockResponse);
+
+        const tokens = ["token1", "token2"];
+        const topic = "campus-news";
+
+        const result = await firebaseService.unsubscribeFromTopic(
+          tokens,
+          topic
+        );
+
+        expect(admin.messaging().unsubscribeFromTopic).toHaveBeenCalledWith(
+          tokens,
+          topic
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it("should throw error for empty tokens array", async () => {
+        await expect(
+          firebaseService.unsubscribeFromTopic([], "topic")
+        ).rejects.toThrow("Tokens array is required and cannot be empty");
+      });
+
+      it("should throw error for missing topic", async () => {
+        await expect(
+          firebaseService.unsubscribeFromTopic(["token1"], "")
+        ).rejects.toThrow("Topic name is required");
+      });
+    });
+
+    describe("extractInvalidTokens", () => {
+      it("should extract invalid tokens from batch response", () => {
+        const responses = [
+          { success: true, messageId: "msg-1" },
+          {
+            success: false,
+            error: { code: "messaging/invalid-registration-token" },
+          },
+          { success: true, messageId: "msg-3" },
+          {
+            success: false,
+            error: { code: "messaging/registration-token-not-registered" },
+          },
+          {
+            success: false,
+            error: { code: "messaging/internal-error" },
+          },
+        ];
+        const tokens = ["token1", "token2", "token3", "token4", "token5"];
+
+        const invalidTokens = firebaseService.extractInvalidTokens(
+          responses,
+          tokens
+        );
+
+        expect(invalidTokens).toEqual(["token2", "token4"]);
+      });
+
+      it("should return empty array when no invalid tokens", () => {
+        const responses = [
+          { success: true, messageId: "msg-1" },
+          { success: true, messageId: "msg-2" },
+        ];
+        const tokens = ["token1", "token2"];
+
+        const invalidTokens = firebaseService.extractInvalidTokens(
+          responses,
+          tokens
+        );
+
+        expect(invalidTokens).toEqual([]);
+      });
     });
   });
 });

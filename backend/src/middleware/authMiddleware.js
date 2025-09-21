@@ -173,36 +173,40 @@ const optionalAuth = async (req, res, next) => {
  * @param {Function} next - Express next function
  */
 const requireAdmin = async (req, res, next) => {
-  // First run standard authentication
-  await new Promise((resolve, reject) => {
-    authenticateToken(req, res, (error) => {
-      if (error) reject(error);
-      else resolve();
+  try {
+    // First run standard authentication
+    await new Promise((resolve, reject) => {
+      authenticateToken(req, res, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
     });
-  }).catch(() => {
-    // Authentication failed, response already sent
+
+    // Check if user has admin privileges
+    // This could be based on email domain, specific user list, or database role
+    const adminEmails = (process.env.ADMIN_EMAILS || "")
+      .split(",")
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0);
+
+    const isAdmin =
+      adminEmails.includes(req.user?.email) ||
+      req.user?.email?.endsWith("@admin.college.edu");
+
+    if (!isAdmin) {
+      return res.status(403).json({
+        error: {
+          code: "INSUFFICIENT_PERMISSIONS",
+          message: "Admin access required",
+        },
+      });
+    }
+
+    next();
+  } catch (error) {
+    // Authentication failed, response already sent by authenticateToken
     return;
-  });
-
-  // Check if user has admin privileges
-  // This could be based on email domain, specific user list, or database role
-  const adminEmails = (process.env.ADMIN_EMAILS || "")
-    .split(",")
-    .map((email) => email.trim());
-  const isAdmin =
-    adminEmails.includes(req.user?.email) ||
-    req.user?.email?.endsWith("@admin.college.edu");
-
-  if (!isAdmin) {
-    return res.status(403).json({
-      error: {
-        code: "INSUFFICIENT_PERMISSIONS",
-        message: "Admin access required",
-      },
-    });
   }
-
-  next();
 };
 
 module.exports = {

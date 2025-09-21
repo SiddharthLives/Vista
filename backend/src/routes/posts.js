@@ -7,6 +7,11 @@ const {
   authenticateToken,
   optionalAuth,
 } = require("../middleware/authMiddleware");
+const {
+  contentCreationRateLimit,
+  interactionRateLimit,
+  searchRateLimit,
+} = require("../middleware/rateLimitMiddleware");
 
 const router = express.Router();
 

@@ -8,6 +8,13 @@ const { createServer } = require("http");
 const { Server } = require("socket.io");
 const SocketService = require("./services/socketService");
 const NotificationService = require("./services/notificationService");
+const { generalRateLimit } = require("./middleware/rateLimitMiddleware");
+const {
+  sanitizeInput,
+  securityHeaders,
+  securityLogger,
+  secureErrorHandler,
+} = require("./middleware/validationMiddleware");
 require("dotenv").config();
 
 const app = express();
@@ -58,6 +65,7 @@ const initializeServices = () => {
 
 // Security middleware
 app.use(helmet());
+app.use(securityHeaders);
 app.use(compression());
 
 // CORS configuration
@@ -77,6 +85,13 @@ if (process.env.NODE_ENV !== "test") {
   app.use(morgan("combined"));
 }
 
+// Apply general rate limiting to all routes
+app.use(generalRateLimit);
+
+// Security logging and input sanitization
+app.use(securityLogger);
+app.use(sanitizeInput);
+
 // Health check endpoint
 app.get("/health", (req, res) => {
   res.status(200).json({
@@ -95,6 +110,7 @@ const topicsRoutes = require("./routes/topics");
 const usersRoutes = require("./routes/users");
 const chatRoutes = require("./routes/chat");
 const notificationRoutes = require("./routes/notifications");
+const adminRoutes = require("./routes/admin");
 
 // API routes
 app.use("/auth", authRoutes);
@@ -105,6 +121,7 @@ app.use("/topics", topicsRoutes);
 app.use("/users", usersRoutes);
 app.use("/chat", chatRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/admin", adminRoutes);
 
 app.get("/", (req, res) => {
   res.json({
@@ -115,16 +132,7 @@ app.get("/", (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
-    error: {
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Something went wrong!",
-      ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
-    },
-  });
-});
+app.use(secureErrorHandler);
 
 // 404 handler
 app.use("*", (req, res) => {

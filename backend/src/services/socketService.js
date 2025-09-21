@@ -1,4 +1,5 @@
 const { socketAuthMiddleware } = require("../middleware/socketAuthMiddleware");
+const { createSocketRateLimit } = require("../middleware/rateLimitMiddleware");
 const ChatService = require("./chatService");
 
 /**
@@ -30,6 +31,9 @@ class SocketService {
   setupMiddleware() {
     // Authentication middleware
     this.io.use(socketAuthMiddleware);
+
+    // Rate limiting middleware for general socket events
+    this.io.use(createSocketRateLimit("general"));
 
     // Connection logging middleware
     this.io.use((socket, next) => {
@@ -81,29 +85,41 @@ class SocketService {
       this.handleUserPresence(socket, data);
     });
 
-    // Handle chat events
+    // Handle chat events with rate limiting
     socket.on("join_conversation", (data) => {
-      this.handleJoinConversation(socket, data);
+      this.applySocketRateLimit(socket, "roomActions", () => {
+        this.handleJoinConversation(socket, data);
+      });
     });
 
     socket.on("leave_conversation", (data) => {
-      this.handleLeaveConversation(socket, data);
+      this.applySocketRateLimit(socket, "roomActions", () => {
+        this.handleLeaveConversation(socket, data);
+      });
     });
 
     socket.on("send_message", (data) => {
-      this.handleSendMessage(socket, data);
+      this.applySocketRateLimit(socket, "sendMessage", () => {
+        this.handleSendMessage(socket, data);
+      });
     });
 
     socket.on("typing_start", (data) => {
-      this.handleTypingStart(socket, data);
+      this.applySocketRateLimit(socket, "typing", () => {
+        this.handleTypingStart(socket, data);
+      });
     });
 
     socket.on("typing_stop", (data) => {
-      this.handleTypingStop(socket, data);
+      this.applySocketRateLimit(socket, "typing", () => {
+        this.handleTypingStop(socket, data);
+      });
     });
 
     socket.on("mark_messages_read", (data) => {
-      this.handleMarkMessagesRead(socket, data);
+      this.applySocketRateLimit(socket, "general", () => {
+        this.handleMarkMessagesRead(socket, data);
+      });
     });
 
     // Emit connection success
@@ -318,6 +334,41 @@ class SocketService {
       uniqueUsers: this.connectedUsers.size,
       onlineUsers: this.getOnlineUsers(),
     };
+  }
+
+  /**
+   * Apply rate limiting to socket events
+   * @param {Object} socket - Socket.IO socket instance
+   * @param {string} eventType - Type of event for rate limiting
+   * @param {Function} handler - Event handler function
+   */
+  applySocketRateLimit(socket, eventType, handler) {
+    const {
+      socketRateLimitStore,
+      socketRateLimits,
+    } = require("../middleware/rateLimitMiddleware");
+    const userId = socket.user?.studentId || socket.handshake.address;
+    const config = socketRateLimits[eventType] || socketRateLimits.general;
+
+    const result = socketRateLimitStore.checkLimit(
+      userId,
+      eventType,
+      config.limit,
+      config.windowMs
+    );
+
+    if (!result.allowed) {
+      socket.emit("rate_limit_exceeded", {
+        code: "SOCKET_RATE_LIMIT_EXCEEDED",
+        message: `Too many ${eventType} events, please slow down`,
+        retryAfter: Math.ceil((result.resetTime - Date.now()) / 1000),
+        eventType,
+      });
+      return;
+    }
+
+    // Execute the handler if rate limit check passes
+    handler();
   }
 
   // Chat Event Handlers

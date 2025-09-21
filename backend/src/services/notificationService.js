@@ -1,4 +1,6 @@
 const Notification = require("../models/Notification");
+const fcmService = require("./fcmService");
+const User = require("../models/User");
 
 /**
  * Notification service for managing notifications and real-time delivery
@@ -6,6 +8,13 @@ const Notification = require("../models/Notification");
 class NotificationService {
   constructor(socketService = null) {
     this.socketService = socketService;
+    this.fcmService = fcmService;
+    this.rateLimitConfig = {
+      maxNotificationsPerUser: 50, // Max notifications per user per hour
+      maxBatchSize: 100, // Max users to notify in one batch
+      cooldownPeriod: 60 * 1000, // 1 minute cooldown between batches
+    };
+    this.lastBatchTime = new Map(); // Track last batch time per notification type
   }
 
   /**
@@ -30,6 +39,17 @@ class NotificationService {
       message = null,
     } = notificationData;
 
+    // Check user notification preferences
+    const userPreferences = await this.getUserNotificationPreferences(
+      toStudentId
+    );
+    if (!userPreferences.enabled || !userPreferences.types[type]) {
+      console.log(
+        `Notification skipped for user ${toStudentId} due to preferences`
+      );
+      return null;
+    }
+
     // Create notification in database
     const notification = new Notification({
       toStudentId,
@@ -50,11 +70,13 @@ class NotificationService {
 
     await notification.save();
 
-    // Send real-time notification if user is online
+    // Try to send real-time notification first
+    let sentRealtime = false;
     if (this.socketService) {
-      this.socketService.sendNotificationToUser(toStudentId, {
+      sentRealtime = this.socketService.sendNotificationToUser(toStudentId, {
         _id: notification._id,
         type: notification.type,
+        title: notification.title,
         message: notification.message,
         meta: notification.meta,
         isRead: notification.isRead,
@@ -62,26 +84,208 @@ class NotificationService {
       });
     }
 
+    // If user is offline or real-time failed, send push notification
+    if (!sentRealtime && userPreferences.pushEnabled) {
+      try {
+        await this.fcmService.sendNotificationToUser(
+          toStudentId,
+          {
+            title: notification.title,
+            body: notification.message,
+          },
+          {
+            type: notification.type,
+            notificationId: notification._id.toString(),
+            entityType: notification.meta.entityType,
+            entityId: notification.meta.entityId
+              ? notification.meta.entityId.toString()
+              : undefined,
+            fromStudentId: notification.meta.fromStudentId,
+          }
+        );
+      } catch (error) {
+        console.error(
+          `Failed to send push notification to ${toStudentId}:`,
+          error.message
+        );
+      }
+    }
+
     return notification;
   }
 
   /**
-   * Create notifications for multiple users
+   * Create notifications for multiple users with batching and rate limiting
    * @param {Array} studentIds - Array of student IDs
    * @param {Object} notificationData - Notification data
    * @returns {Array} - Created notifications
    */
   async createNotificationsForUsers(studentIds, notificationData) {
-    const notifications = await Promise.all(
-      studentIds.map((studentId) =>
-        this.createNotification({
-          ...notificationData,
-          toStudentId: studentId,
-        })
-      )
-    );
+    if (!studentIds || studentIds.length === 0) {
+      return [];
+    }
 
-    return notifications;
+    // Apply rate limiting for batch notifications
+    const batchKey = `${notificationData.type}_batch`;
+    if (this.shouldRateLimit(batchKey, studentIds.length)) {
+      console.log(
+        `Rate limiting applied for notification type: ${notificationData.type}`
+      );
+      return [];
+    }
+
+    // Process in batches to avoid overwhelming the system
+    const batchSize = Math.min(
+      this.rateLimitConfig.maxBatchSize,
+      studentIds.length
+    );
+    const batches = [];
+
+    for (let i = 0; i < studentIds.length; i += batchSize) {
+      batches.push(studentIds.slice(i, i + batchSize));
+    }
+
+    const allNotifications = [];
+
+    for (const batch of batches) {
+      // Get user preferences for the batch
+      const usersWithPreferences = await this.getBatchUserPreferences(
+        batch,
+        notificationData.type
+      );
+
+      // Filter users who want to receive this notification
+      const eligibleUsers = usersWithPreferences.filter(
+        (user) =>
+          user.preferences.enabled &&
+          user.preferences.types[notificationData.type]
+      );
+
+      if (eligibleUsers.length === 0) {
+        continue;
+      }
+
+      // Create notifications for eligible users
+      const batchNotifications = await Promise.all(
+        eligibleUsers.map(async (user) => {
+          const notification = new Notification({
+            toStudentId: user.studentId,
+            type: notificationData.type,
+            title: this.generateNotificationTitle(
+              notificationData.type,
+              notificationData.meta
+            ),
+            message:
+              notificationData.message ||
+              this.generateNotificationMessage(
+                notificationData.type,
+                notificationData.meta
+              ),
+            meta: {
+              entityType:
+                notificationData.meta.entityType ||
+                this.getEntityTypeFromNotificationType(notificationData.type),
+              entityId:
+                notificationData.meta.entityId ||
+                notificationData.meta.postId ||
+                notificationData.meta.topicId ||
+                notificationData.meta.conversationId,
+              fromStudentId: notificationData.fromStudentId,
+              ...notificationData.meta,
+            },
+            isRead: false,
+            createdAt: new Date(),
+          });
+
+          await notification.save();
+          return notification;
+        })
+      );
+
+      allNotifications.push(...batchNotifications);
+
+      // Send real-time notifications to online users
+      const onlineUsers = [];
+      const offlineUsers = [];
+
+      if (this.socketService) {
+        for (const user of eligibleUsers) {
+          const notification = batchNotifications.find(
+            (n) => n.toStudentId === user.studentId
+          );
+          const sentRealtime = this.socketService.sendNotificationToUser(
+            user.studentId,
+            {
+              _id: notification._id,
+              type: notification.type,
+              title: notification.title,
+              message: notification.message,
+              meta: notification.meta,
+              isRead: notification.isRead,
+              createdAt: notification.createdAt,
+            }
+          );
+
+          if (sentRealtime) {
+            onlineUsers.push(user);
+          } else if (user.preferences.pushEnabled) {
+            offlineUsers.push(user);
+          }
+        }
+      } else {
+        // If no socket service, treat all as offline
+        offlineUsers.push(
+          ...eligibleUsers.filter((user) => user.preferences.pushEnabled)
+        );
+      }
+
+      // Send push notifications to offline users
+      if (offlineUsers.length > 0) {
+        try {
+          const offlineStudentIds = offlineUsers.map((user) => user.studentId);
+          await this.fcmService.sendNotificationToUsers(
+            offlineStudentIds,
+            {
+              title: this.generateNotificationTitle(
+                notificationData.type,
+                notificationData.meta
+              ),
+              body:
+                notificationData.message ||
+                this.generateNotificationMessage(
+                  notificationData.type,
+                  notificationData.meta
+                ),
+            },
+            {
+              type: notificationData.type,
+              entityType:
+                notificationData.meta.entityType ||
+                this.getEntityTypeFromNotificationType(notificationData.type),
+              entityId: notificationData.meta.entityId
+                ? notificationData.meta.entityId.toString()
+                : undefined,
+              fromStudentId: notificationData.fromStudentId,
+            }
+          );
+        } catch (error) {
+          console.error(
+            `Failed to send batch push notifications:`,
+            error.message
+          );
+        }
+      }
+
+      // Add cooldown between batches
+      if (batches.length > 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms between batches
+      }
+    }
+
+    // Update rate limiting tracker
+    this.lastBatchTime.set(batchKey, Date.now());
+
+    return allNotifications;
   }
 
   /**
@@ -480,10 +684,218 @@ class NotificationService {
   async sendGroupNotification(targetGroup, notificationData) {
     const { year, department, section } = targetGroup;
 
-    // This would require User model to find matching users
-    // For now, return empty array as this would be implemented
-    // when integrating with the User service
-    return [];
+    try {
+      // Build query based on target group
+      const query = {};
+      if (year) query.year = year;
+      if (department) query.department = department;
+      if (section) query.section = section;
+
+      // Find matching users
+      const users = await User.find(query).select("studentId").lean();
+      const studentIds = users.map((user) => user.studentId);
+
+      if (studentIds.length === 0) {
+        return [];
+      }
+
+      return await this.createNotificationsForUsers(
+        studentIds,
+        notificationData
+      );
+    } catch (error) {
+      console.error("Error sending group notification:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get user notification preferences
+   * @param {string} studentId - Student ID
+   * @returns {Object} - User preferences
+   */
+  async getUserNotificationPreferences(studentId) {
+    try {
+      const user = await User.findOne({ studentId }).select("settings").lean();
+
+      if (!user || !user.settings) {
+        return this.getDefaultNotificationPreferences();
+      }
+
+      return {
+        enabled: user.settings.notifications !== false,
+        pushEnabled: user.settings.pushNotifications !== false,
+        types: {
+          like: user.settings.notificationTypes?.like !== false,
+          comment: user.settings.notificationTypes?.comment !== false,
+          topic_vote: user.settings.notificationTypes?.topic_vote !== false,
+          topic_comment:
+            user.settings.notificationTypes?.topic_comment !== false,
+          message: user.settings.notificationTypes?.message !== false,
+          follow: user.settings.notificationTypes?.follow !== false,
+          system: user.settings.notificationTypes?.system !== false,
+        },
+      };
+    } catch (error) {
+      console.error(
+        `Error getting notification preferences for ${studentId}:`,
+        error
+      );
+      return this.getDefaultNotificationPreferences();
+    }
+  }
+
+  /**
+   * Get batch user preferences for multiple users
+   * @param {Array} studentIds - Array of student IDs
+   * @param {string} notificationType - Type of notification
+   * @returns {Array} - Array of users with preferences
+   */
+  async getBatchUserPreferences(studentIds, notificationType) {
+    try {
+      const users = await User.find({
+        studentId: { $in: studentIds },
+      })
+        .select("studentId settings")
+        .lean();
+
+      return users.map((user) => ({
+        studentId: user.studentId,
+        preferences: {
+          enabled: user.settings?.notifications !== false,
+          pushEnabled: user.settings?.pushNotifications !== false,
+          types: {
+            [notificationType]:
+              user.settings?.notificationTypes?.[notificationType] !== false,
+            like: user.settings?.notificationTypes?.like !== false,
+            comment: user.settings?.notificationTypes?.comment !== false,
+            topic_vote: user.settings?.notificationTypes?.topic_vote !== false,
+            topic_comment:
+              user.settings?.notificationTypes?.topic_comment !== false,
+            message: user.settings?.notificationTypes?.message !== false,
+            follow: user.settings?.notificationTypes?.follow !== false,
+            system: user.settings?.notificationTypes?.system !== false,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error("Error getting batch user preferences:", error);
+      // Return default preferences for all users
+      return studentIds.map((studentId) => ({
+        studentId,
+        preferences: this.getDefaultNotificationPreferences(),
+      }));
+    }
+  }
+
+  /**
+   * Get default notification preferences
+   * @returns {Object} - Default preferences
+   */
+  getDefaultNotificationPreferences() {
+    return {
+      enabled: true,
+      pushEnabled: true,
+      types: {
+        like: true,
+        comment: true,
+        topic_vote: true,
+        topic_comment: true,
+        message: true,
+        follow: true,
+        system: true,
+      },
+    };
+  }
+
+  /**
+   * Check if notification should be rate limited
+   * @param {string} batchKey - Batch key for rate limiting
+   * @param {number} userCount - Number of users to notify
+   * @returns {boolean} - Whether to rate limit
+   */
+  shouldRateLimit(batchKey, userCount) {
+    const lastTime = this.lastBatchTime.get(batchKey);
+    const now = Date.now();
+
+    // Check cooldown period
+    if (lastTime && now - lastTime < this.rateLimitConfig.cooldownPeriod) {
+      return true;
+    }
+
+    // Check batch size limit
+    if (userCount > this.rateLimitConfig.maxNotificationsPerUser) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Update user notification preferences
+   * @param {string} studentId - Student ID
+   * @param {Object} preferences - New preferences
+   * @returns {Object} - Update result
+   */
+  async updateUserNotificationPreferences(studentId, preferences) {
+    try {
+      const updateData = {
+        "settings.notifications": preferences.enabled,
+        "settings.pushNotifications": preferences.pushEnabled,
+      };
+
+      if (preferences.types) {
+        Object.keys(preferences.types).forEach((type) => {
+          updateData[`settings.notificationTypes.${type}`] =
+            preferences.types[type];
+        });
+      }
+
+      const result = await User.updateOne({ studentId }, { $set: updateData });
+
+      return {
+        success: result.modifiedCount > 0,
+        modifiedCount: result.modifiedCount,
+      };
+    } catch (error) {
+      console.error(
+        `Error updating notification preferences for ${studentId}:`,
+        error
+      );
+      throw new Error(
+        `Failed to update notification preferences: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Register FCM token for a user
+   * @param {string} studentId - Student ID
+   * @param {string} fcmToken - FCM token
+   * @returns {Object} - Registration result
+   */
+  async registerFCMToken(studentId, fcmToken) {
+    try {
+      return await this.fcmService.registerToken(studentId, fcmToken);
+    } catch (error) {
+      console.error(`Error registering FCM token for ${studentId}:`, error);
+      throw new Error(`Failed to register FCM token: ${error.message}`);
+    }
+  }
+
+  /**
+   * Unregister FCM token for a user
+   * @param {string} studentId - Student ID
+   * @param {string} fcmToken - FCM token
+   * @returns {Object} - Unregistration result
+   */
+  async unregisterFCMToken(studentId, fcmToken) {
+    try {
+      return await this.fcmService.unregisterToken(studentId, fcmToken);
+    } catch (error) {
+      console.error(`Error unregistering FCM token for ${studentId}:`, error);
+      throw new Error(`Failed to unregister FCM token: ${error.message}`);
+    }
   }
 }
 

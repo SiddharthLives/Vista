@@ -88,6 +88,23 @@ const topicSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Moderation fields
+    isRemoved: {
+      type: Boolean,
+      default: false,
+    },
+    removedBy: {
+      type: String,
+      trim: true,
+    },
+    removedAt: {
+      type: Date,
+    },
+    removedReason: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Removal reason cannot exceed 500 characters"],
+    },
   },
   {
     timestamps: true,

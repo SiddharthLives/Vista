@@ -1,7 +1,7 @@
 const express = require("express");
 const { body, validationResult } = require("express-validator");
-const rateLimit = require("express-rate-limit");
 const { authenticateToken } = require("../middleware/authMiddleware");
+const { authRateLimit } = require("../middleware/rateLimitMiddleware");
 const {
   firebaseSignIn,
   linkStudentId,
@@ -10,20 +10,6 @@ const {
 } = require("../controllers/authController");
 
 const router = express.Router();
-
-// Rate limiting for authentication endpoints
-const authRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
-  message: {
-    error: {
-      code: "RATE_LIMIT_EXCEEDED",
-      message: "Too many authentication attempts, please try again later",
-    },
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 // Validation middleware
 const validateFirebaseSignIn = [

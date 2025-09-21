@@ -1,27 +1,13 @@
 const express = require("express");
 const { body, validationResult } = require("express-validator");
-const rateLimit = require("express-rate-limit");
 const { authenticateToken } = require("../middleware/authMiddleware");
+const { mediaUploadRateLimit } = require("../middleware/rateLimitMiddleware");
 const {
   generateSignedUploadParams,
   validateMediaForPost,
 } = require("../controllers/mediaController");
 
 const router = express.Router();
-
-// Rate limiting for media endpoints
-const mediaRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50, // Limit each IP to 50 requests per windowMs
-  message: {
-    error: {
-      code: "RATE_LIMIT_EXCEEDED",
-      message: "Too many media requests, please try again later",
-    },
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
 
 // Validation middleware for signed upload parameters
 const validateSignRequest = [
@@ -104,7 +90,7 @@ const handleValidationErrors = (req, res, next) => {
  */
 router.post(
   "/sign",
-  mediaRateLimit,
+  mediaUploadRateLimit,
   authenticateToken,
   validateSignRequest,
   handleValidationErrors,
@@ -119,7 +105,7 @@ router.post(
  */
 router.post(
   "/validate",
-  mediaRateLimit,
+  mediaUploadRateLimit,
   authenticateToken,
   validateMediaValidation,
   handleValidationErrors,
