@@ -572,3 +572,506 @@ dart run build_runner build  # Generate mocks
 **Total Estimated Time to Complete**: 3-4 weeks of development
 
 This documentation provides a complete overview of the current project status. The foundation is solid with a fully functional backend and most of the Flutter infrastructure in place. The main remaining work is implementing the chat and profile UI components.
+
+## Detailed Step-by-Step Implementation Plan
+
+Based on the original 17-task breakdown, here are the exact steps to continue development:
+
+### 🔄 IMMEDIATE NEXT TASKS (Tasks 12.2 - 12.3)
+
+#### Task 12.2: Implement Chat Functionality
+
+**Status**: Not Started | **Priority**: High | **Estimated Time**: 1-2 weeks
+
+**Step-by-step implementation**:
+
+1. **Create Chat Provider** (`vista/lib/providers/chat_provider.dart`)
+
+   - Implement state management for conversations and messages
+   - Add methods for loading conversations, sending messages
+   - Handle real-time message updates
+   - Manage typing indicators and read receipts
+
+2. **Implement Conversations List Screen** (`vista/lib/screens/conversations_screen.dart`)
+
+   - Create conversations list with last message preview
+   - Add search functionality for conversations
+   - Implement pull-to-refresh and pagination
+   - Show unread message counts and online status
+
+3. **Create Chat Screen** (`vista/lib/screens/chat_screen.dart`)
+
+   - Implement message thread UI with scrollable list
+   - Add message input composer at bottom
+   - Show typing indicators and read receipts
+   - Handle real-time message updates
+
+4. **Create Message Widgets**
+
+   - `vista/lib/widgets/message_bubble.dart` - Individual message display
+   - `vista/lib/widgets/message_composer.dart` - Message input with media support
+   - `vista/lib/widgets/conversation_card.dart` - Conversation list item
+
+5. **Implement Socket.IO Integration**
+
+   - Add socket_io_client dependency
+   - Create Socket.IO service (`vista/lib/services/socket_service.dart`)
+   - Implement authentication for socket connections
+   - Handle real-time events (messages, typing, read receipts)
+
+6. **Add Media Support to Chat**
+
+   - Integrate image picker for photo sharing
+   - Implement media upload through existing Cloudinary service
+   - Add media preview in message bubbles
+
+7. **Write Widget Tests**
+   - `vista/test/widgets/message_bubble_test.dart`
+   - `vista/test/screens/chat_screen_test.dart`
+   - `vista/test/providers/chat_provider_test.dart`
+
+**Requirements Satisfied**: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 11.4
+
+#### Task 12.3: Implement User Profile and Search
+
+**Status**: Not Started | **Priority**: High | **Estimated Time**: 1 week
+
+**Step-by-step implementation**:
+
+1. **Create Users Provider** (`vista/lib/providers/users_provider.dart`)
+
+   - Implement state management for user profiles and search
+   - Add methods for loading user profiles, updating profiles
+   - Handle user search with filters
+   - Manage user discovery features
+
+2. **Implement User Profile Screen** (`vista/lib/screens/profile_screen.dart`)
+
+   - Create user profile display with photo, bio, stats
+   - Show user's posts and topics
+   - Add follow/unfollow functionality (if needed)
+   - Implement profile actions menu
+
+3. **Create Profile Editing Screen** (`vista/lib/screens/edit_profile_screen.dart`)
+
+   - Add editable fields (displayName, bio, photo)
+   - Implement photo upload functionality
+   - Add form validation and error handling
+   - Save changes to backend
+
+4. **Implement User Search Screen** (`vista/lib/screens/user_search_screen.dart`)
+
+   - Create search interface with filters
+   - Add year/department/section filter options
+   - Implement search results with user cards
+   - Add infinite scroll for search results
+
+5. **Create User Widgets**
+
+   - `vista/lib/widgets/user_card.dart` - User display in search results
+   - `vista/lib/widgets/profile_header.dart` - Profile screen header
+   - `vista/lib/widgets/user_stats.dart` - User statistics display
+
+6. **Add User Discovery Features**
+
+   - Implement "People you may know" suggestions
+   - Add filtering by academic information
+   - Create user connection features
+
+7. **Write Widget Tests**
+   - `vista/test/widgets/user_card_test.dart`
+   - `vista/test/screens/profile_screen_test.dart`
+   - `vista/test/providers/users_provider_test.dart`
+
+**Requirements Satisfied**: 2.1, 2.2, 2.3, 2.4, 2.5, 11.4
+
+### 🔄 SUBSEQUENT TASKS (Tasks 13-17)
+
+#### Task 13: Flutter Real-time and Notifications
+
+**Status**: Not Started | **Priority**: Medium | **Estimated Time**: 1 week
+
+##### Task 13.1: Socket.IO Client Integration
+
+1. **Set up socket_io_client with authentication**
+
+   - Add socket_io_client dependency to pubspec.yaml
+   - Create `vista/lib/services/socket_service.dart`
+   - Implement JWT token authentication for socket connections
+   - Handle connection state management and reconnection logic
+
+2. **Create real-time event handling service**
+
+   - Implement event listeners for messages, notifications, typing
+   - Create event emitters for user actions
+   - Add error handling and connection recovery
+
+3. **Implement connection state management**
+
+   - Track online/offline status
+   - Handle automatic reconnection
+   - Manage socket connection lifecycle
+
+4. **Add real-time updates for all features**
+
+   - Real-time message delivery and read receipts
+   - Live notification delivery
+   - Real-time post likes and comments updates
+   - User presence indicators
+
+5. **Write integration tests**
+   - Test socket connection and authentication
+   - Test real-time message delivery
+   - Test connection recovery scenarios
+
+##### Task 13.2: Push Notifications
+
+1. **Set up Firebase Cloud Messaging for Flutter**
+
+   - Configure FCM in Firebase console
+   - Add firebase_messaging dependency
+   - Set up platform-specific configurations (Android/iOS)
+
+2. **Implement FCM token registration**
+
+   - Register device tokens with backend
+   - Handle token refresh and updates
+   - Manage token cleanup for inactive devices
+
+3. **Add notification handling**
+
+   - Handle foreground notifications
+   - Handle background/terminated app notifications
+   - Create notification display and interaction
+
+4. **Create notification UI and navigation**
+
+   - Design notification display components
+   - Implement navigation to relevant content
+   - Add notification history screen
+
+5. **Write integration tests**
+   - Test FCM token registration
+   - Test notification handling in different app states
+   - Test notification navigation
+
+#### Task 14: Media Upload Integration
+
+**Status**: Not Started | **Priority**: Medium | **Estimated Time**: 3-5 days
+
+##### Task 14.1: Cloudinary Upload Service
+
+1. **Create Cloudinary upload service**
+
+   - Implement `vista/lib/services/cloudinary_service.dart`
+   - Use signed parameter flow from backend
+   - Add upload progress tracking
+   - Handle upload errors and retries
+
+2. **Implement image/video picker integration**
+
+   - Add image_picker dependency
+   - Create media selection utilities
+   - Handle camera and gallery access
+   - Add permission handling
+
+3. **Add upload progress tracking**
+
+   - Create progress indicators for uploads
+   - Handle upload cancellation
+   - Show upload status in UI
+
+4. **Create media compression and validation**
+
+   - Implement image compression before upload
+   - Add file size and type validation
+   - Create media preview functionality
+
+5. **Write unit tests**
+   - Test upload service functionality
+   - Test media validation
+   - Test error handling scenarios
+
+##### Task 14.2: Integrate Media Upload
+
+1. **Connect media service with post composer**
+
+   - Update post creation flow with media upload
+   - Add media preview in post composer
+   - Handle multiple media uploads
+
+2. **Implement media upload for stories**
+
+   - Integrate with story creation screen
+   - Add story-specific media processing
+   - Handle story media expiration
+
+3. **Add media upload for chat messages**
+
+   - Integrate with message composer
+   - Add image/video sharing in chat
+   - Handle media message display
+
+4. **Create media preview and editing**
+
+   - Add basic image editing tools
+   - Implement media cropping and filters
+   - Create media gallery view
+
+5. **Write integration tests**
+   - Test end-to-end media upload flow
+   - Test media integration with all features
+   - Test error scenarios and recovery
+
+#### Task 15: Admin Web Interface
+
+**Status**: Not Started | **Priority**: Low | **Estimated Time**: 1-2 weeks
+
+##### Task 15.1: Basic Admin Web UI
+
+1. **Set up React/Next.js project**
+
+   - Initialize admin web project
+   - Set up project structure and dependencies
+   - Configure build and development scripts
+
+2. **Implement admin authentication**
+
+   - Create admin login system
+   - Implement role-based access control
+   - Add session management
+
+3. **Create roster upload interface**
+
+   - Build CSV file upload component
+   - Add file validation and preview
+   - Implement batch user creation
+
+4. **Add content moderation dashboard**
+
+   - Create content review interface
+   - Add flagging and removal tools
+   - Implement user management features
+
+5. **Write unit tests**
+   - Test admin components
+   - Test file upload functionality
+   - Test authentication flows
+
+##### Task 15.2: Admin Reporting Features
+
+1. **Create analytics dashboard**
+
+   - Build metrics visualization
+   - Add user activity charts
+   - Implement content statistics
+
+2. **Implement content flagging interface**
+
+   - Create content review queue
+   - Add moderation actions
+   - Implement appeal system
+
+3. **Add user management functionality**
+
+   - Create user search and filtering
+   - Add user banning/suspension tools
+   - Implement user activity monitoring
+
+4. **Create data export features**
+
+   - Add CSV/JSON export functionality
+   - Implement privacy compliance tools
+   - Create backup and restore features
+
+5. **Write integration tests**
+   - Test admin workflows
+   - Test data export functionality
+   - Test moderation features
+
+#### Task 16: Testing and Quality Assurance
+
+**Status**: Partially Complete | **Priority**: High | **Estimated Time**: 1 week
+
+##### Task 16.1: Backend Testing ✅ (Mostly Complete)
+
+- ✅ Unit tests for models, services
+- ✅ Integration tests for API endpoints
+- ✅ End-to-end tests for user journeys
+- ⚠️ Performance tests (Basic implementation)
+
+##### Task 16.2: Frontend Testing 🔄 (In Progress)
+
+1. **Complete widget tests for all components**
+
+   - ✅ Topics feature tests complete
+   - ❌ Chat functionality tests (pending implementation)
+   - ❌ Profile functionality tests (pending implementation)
+   - ❌ Real-time feature tests (pending implementation)
+
+2. **Implement integration tests for user flows**
+
+   - Test complete user registration flow
+   - Test post creation and interaction flow
+   - Test chat conversation flow
+   - Test profile management flow
+
+3. **Add performance tests**
+
+   - Test list scrolling performance
+   - Test media loading and caching
+   - Test real-time update performance
+   - Test memory usage optimization
+
+4. **Create accessibility tests**
+   - Test screen reader compatibility
+   - Test keyboard navigation
+   - Test color contrast and font sizes
+   - Test voice control integration
+
+#### Task 17: Documentation and Deployment
+
+**Status**: Partially Complete | **Priority**: Medium | **Estimated Time**: 3-5 days
+
+##### Task 17.1: Documentation 🔄 (In Progress)
+
+1. **Write comprehensive README files**
+
+   - ⚠️ Backend README (basic version exists)
+   - ⚠️ Frontend README (basic version exists)
+   - ❌ Admin interface README (not created)
+   - ❌ Deployment README (not created)
+
+2. **Create detailed API documentation**
+
+   - ❌ OpenAPI/Swagger documentation
+   - ❌ Request/response examples
+   - ❌ Authentication guide
+   - ❌ Error code reference
+
+3. **Document environment setup**
+
+   - ✅ Development environment setup
+   - ✅ Database configuration
+   - ✅ Firebase setup guide
+   - ❌ Production environment guide
+
+4. **Create deployment guides**
+   - ❌ Docker deployment guide
+   - ❌ Cloud platform deployment (AWS/GCP)
+   - ❌ Database migration guide
+   - ❌ Monitoring and logging setup
+
+##### Task 17.2: Production Deployment ❌ (Not Started)
+
+1. **Create production Docker configurations**
+
+   - Multi-stage Docker builds for optimization
+   - Docker Compose for production stack
+   - Environment variable management
+   - Security hardening configurations
+
+2. **Set up environment-specific configs**
+
+   - Production environment variables
+   - Staging environment setup
+   - Development vs production differences
+   - Configuration validation
+
+3. **Implement health check endpoints**
+
+   - API health check endpoints
+   - Database connectivity checks
+   - External service dependency checks
+   - Performance monitoring endpoints
+
+4. **Create database migration scripts**
+
+   - Schema migration system
+   - Data seeding scripts
+   - Backup and restore procedures
+   - Version control for database changes
+
+5. **Document scaling recommendations**
+   - Horizontal scaling strategies
+   - Database optimization guidelines
+   - CDN and caching recommendations
+   - Monitoring and alerting setup
+
+### Priority Implementation Order
+
+#### Phase 1: Core Features Completion (3-4 weeks)
+
+1. **Task 12.2**: Chat Functionality (1-2 weeks)
+2. **Task 12.3**: User Profile & Search (1 week)
+3. **Navigation Integration** (2-3 days)
+4. **Basic testing for new features** (3-5 days)
+
+#### Phase 2: Real-time & Media (1-2 weeks)
+
+1. **Task 13.1**: Socket.IO Integration (3-5 days)
+2. **Task 13.2**: Push Notifications (3-5 days)
+3. **Task 14**: Media Upload Integration (3-5 days)
+
+#### Phase 3: Polish & Production (1-2 weeks)
+
+1. **Task 16.2**: Complete Frontend Testing (3-5 days)
+2. **Task 17.1**: Complete Documentation (2-3 days)
+3. **Task 17.2**: Production Deployment Setup (3-5 days)
+4. **Performance optimization and bug fixes** (2-3 days)
+
+#### Phase 4: Admin Features (Optional - 1-2 weeks)
+
+1. **Task 15**: Admin Web Interface (1-2 weeks)
+
+### Critical Path Dependencies
+
+1. **Chat Feature** depends on:
+
+   - Socket.IO client integration (Task 13.1)
+   - Existing backend chat APIs ✅
+   - Message models ✅
+
+2. **Profile Feature** depends on:
+
+   - Existing user APIs ✅
+   - Media upload service (Task 14.1)
+   - User models ✅
+
+3. **Real-time Features** depend on:
+
+   - Socket.IO backend ✅
+   - Chat and notification systems
+
+4. **Production Deployment** depends on:
+   - All core features complete
+   - Comprehensive testing
+   - Documentation complete
+
+### Implementation Guidelines
+
+#### Code Quality Standards
+
+- Follow Flutter/Dart style guidelines
+- Maintain 80%+ test coverage for new code
+- Use proper error handling and logging
+- Implement proper state management patterns
+- Follow responsive design principles
+
+#### Performance Considerations
+
+- Implement lazy loading for lists
+- Use proper image caching strategies
+- Optimize database queries
+- Implement proper pagination
+- Monitor memory usage and optimize
+
+#### Security Best Practices
+
+- Validate all user inputs
+- Implement proper authentication checks
+- Use secure communication (HTTPS/WSS)
+- Follow data privacy regulations
+- Implement rate limiting and abuse prevention
+
+This detailed plan provides a clear roadmap for completing the remaining 25% of the project, with specific steps, file locations, and implementation details for each task.
