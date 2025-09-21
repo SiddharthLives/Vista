@@ -23,14 +23,17 @@ class ApiService {
   }
 
   /// Make authenticated GET request
-  Future<ApiResponse<Map<String, dynamic>>> get(String endpoint) async {
-    return _makeAuthenticatedRequest('GET', endpoint);
+  Future<ApiResponse<Map<String, dynamic>>> get(
+    String endpoint, {
+    Map<String, String>? queryParams,
+  }) async {
+    return _makeAuthenticatedRequest('GET', endpoint, null, queryParams);
   }
 
   /// Make authenticated POST request
   Future<ApiResponse<Map<String, dynamic>>> post(
     String endpoint, 
-    Map<String, dynamic> data,
+    Map<String, dynamic>? data,
   ) async {
     return _makeAuthenticatedRequest('POST', endpoint, data);
   }
@@ -38,9 +41,17 @@ class ApiService {
   /// Make authenticated PUT request
   Future<ApiResponse<Map<String, dynamic>>> put(
     String endpoint, 
-    Map<String, dynamic> data,
+    Map<String, dynamic>? data,
   ) async {
     return _makeAuthenticatedRequest('PUT', endpoint, data);
+  }
+
+  /// Make authenticated PATCH request
+  Future<ApiResponse<Map<String, dynamic>>> patch(
+    String endpoint, 
+    Map<String, dynamic>? data,
+  ) async {
+    return _makeAuthenticatedRequest('PATCH', endpoint, data);
   }
 
   /// Make authenticated DELETE request
@@ -48,28 +59,66 @@ class ApiService {
     return _makeAuthenticatedRequest('DELETE', endpoint);
   }
 
+  /// Make unauthenticated GET request
+  Future<ApiResponse<Map<String, dynamic>>> getPublic(
+    String endpoint, {
+    Map<String, String>? queryParams,
+  }) async {
+    return _makeRequest('GET', endpoint, null, queryParams, false);
+  }
+
+  /// Make unauthenticated POST request
+  Future<ApiResponse<Map<String, dynamic>>> postPublic(
+    String endpoint, 
+    Map<String, dynamic>? data,
+  ) async {
+    return _makeRequest('POST', endpoint, data, null, false);
+  }
+
   /// Make authenticated HTTP request
   Future<ApiResponse<Map<String, dynamic>>> _makeAuthenticatedRequest(
     String method,
     String endpoint, [
     Map<String, dynamic>? data,
+    Map<String, String>? queryParams,
   ]) async {
-    try {
-      if (_jwtToken == null) {
-        return ApiResponse.error(
-          const ApiError(
-            code: 'NO_AUTH_TOKEN',
-            message: 'Authentication token not found',
-          ),
-        );
-      }
+    if (_jwtToken == null) {
+      return ApiResponse.error(
+        const ApiError(
+          code: 'NO_AUTH_TOKEN',
+          message: 'Authentication token not found',
+        ),
+      );
+    }
+    return _makeRequest(method, endpoint, data, queryParams, true);
+  }
 
-      final headers = {
+  /// Make HTTP request with optional authentication
+  Future<ApiResponse<Map<String, dynamic>>> _makeRequest(
+    String method,
+    String endpoint,
+    Map<String, dynamic>? data,
+    Map<String, String>? queryParams,
+    bool requireAuth,
+  ) async {
+    try {
+      final headers = <String, String>{
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $_jwtToken',
       };
 
-      final uri = Uri.parse('$_baseUrl$endpoint');
+      if (requireAuth && _jwtToken != null) {
+        headers['Authorization'] = 'Bearer $_jwtToken';
+      }
+
+      // Build URI with query parameters
+      Uri uri = Uri.parse('$_baseUrl$endpoint');
+      if (queryParams != null && queryParams.isNotEmpty) {
+        uri = uri.replace(queryParameters: {
+          ...uri.queryParameters,
+          ...queryParams,
+        });
+      }
+
       late http.Response response;
 
       if (AppConfig.enableNetworkLogging) {
@@ -79,29 +128,62 @@ class ApiService {
         }
       }
 
-      switch (method.toUpperCase()) {
-        case 'GET':
-          response = await _client.get(uri, headers: headers);
-          break;
-        case 'POST':
-          response = await _client.post(
-            uri,
-            headers: headers,
-            body: data != null ? jsonEncode(data) : null,
-          );
-          break;
-        case 'PUT':
-          response = await _client.put(
-            uri,
-            headers: headers,
-            body: data != null ? jsonEncode(data) : null,
-          );
-          break;
-        case 'DELETE':
-          response = await _client.delete(uri, headers: headers);
-          break;
-        default:
-          throw ArgumentError('Unsupported HTTP method: $method');
+      // Add retry logic for network requests
+      int retryCount = 0;
+      const maxRetries = 3;
+      const retryDelay = Duration(seconds: 1);
+
+      while (retryCount <= maxRetries) {
+        try {
+          switch (method.toUpperCase()) {
+            case 'GET':
+              response = await _client.get(uri, headers: headers)
+                  .timeout(const Duration(seconds: 30));
+              break;
+            case 'POST':
+              response = await _client.post(
+                uri,
+                headers: headers,
+                body: data != null ? jsonEncode(data) : null,
+              ).timeout(const Duration(seconds: 30));
+              break;
+            case 'PUT':
+              response = await _client.put(
+                uri,
+                headers: headers,
+                body: data != null ? jsonEncode(data) : null,
+              ).timeout(const Duration(seconds: 30));
+              break;
+            case 'PATCH':
+              response = await _client.patch(
+                uri,
+                headers: headers,
+                body: data != null ? jsonEncode(data) : null,
+              ).timeout(const Duration(seconds: 30));
+              break;
+            case 'DELETE':
+              response = await _client.delete(uri, headers: headers)
+                  .timeout(const Duration(seconds: 30));
+              break;
+            default:
+              throw ArgumentError('Unsupported HTTP method: $method');
+          }
+          break; // Success, exit retry loop
+        } on SocketException catch (e) {
+          retryCount++;
+          if (retryCount > maxRetries) {
+            rethrow;
+          }
+          LoggerService.warning('Network error, retrying ($retryCount/$maxRetries): $e');
+          await Future.delayed(retryDelay * retryCount);
+        } on http.ClientException catch (e) {
+          retryCount++;
+          if (retryCount > maxRetries) {
+            rethrow;
+          }
+          LoggerService.warning('HTTP client error, retrying ($retryCount/$maxRetries): $e');
+          await Future.delayed(retryDelay * retryCount);
+        }
       }
 
       if (AppConfig.enableNetworkLogging) {
@@ -110,9 +192,20 @@ class ApiService {
       }
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (response.body.isEmpty) {
+          return ApiResponse.success(<String, dynamic>{});
+        }
         final responseData = jsonDecode(response.body) as Map<String, dynamic>;
         return ApiResponse.success(responseData);
       } else {
+        if (response.body.isEmpty) {
+          return ApiResponse.error(
+            ApiError(
+              code: 'HTTP_${response.statusCode}',
+              message: 'Request failed with status ${response.statusCode}',
+            ),
+          );
+        }
         final errorData = jsonDecode(response.body) as Map<String, dynamic>;
         return ApiResponse.error(ApiError.fromJson(errorData['error']));
       }
@@ -131,6 +224,14 @@ class ApiService {
         const ApiError(
           code: 'INVALID_RESPONSE',
           message: 'Invalid response from server',
+        ),
+      );
+    } on http.ClientException catch (e, stackTrace) {
+      LoggerService.error('HTTP client error during API request', e, stackTrace);
+      return ApiResponse.error(
+        const ApiError(
+          code: 'HTTP_CLIENT_ERROR',
+          message: 'HTTP client error occurred',
         ),
       );
     } catch (e, stackTrace) {

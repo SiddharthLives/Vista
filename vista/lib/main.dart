@@ -6,6 +6,9 @@ import 'config/app_config.dart';
 import 'config/firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/feed_provider.dart';
+import 'providers/stories_provider.dart';
+import 'providers/topics_provider.dart';
 import 'screens/splash_screen.dart';
 import 'services/logger_service.dart';
 
@@ -32,6 +35,9 @@ class VistaApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => FeedProvider()),
+        ChangeNotifierProvider(create: (_) => StoriesProvider()),
+        ChangeNotifierProvider(create: (_) => TopicsProvider()),
       ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {

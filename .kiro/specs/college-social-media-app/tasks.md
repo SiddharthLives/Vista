@@ -242,7 +242,7 @@
     - Write unit tests for authentication services
     - _Requirements: 1.1, 1.2, 1.5, 11.2_
 
-  - [ ] 10.3 Create API client service
+  - [x] 10.3 Create API client service
     - Implement HTTP client with JWT token management
     - Create API service classes for all backend endpoints
     - Add error handling and retry logic for network requests
@@ -250,9 +250,9 @@
     - Write unit tests for API client functionality
     - _Requirements: 11.2_
 
-- [ ] 11. Flutter UI Implementation - Core Screens
+- [x] 11. Flutter UI Implementation - Core Screens
 
-  - [ ] 11.1 Implement authentication screens
+  - [x] 11.1 Implement authentication screens
 
     - Create sign-in screen with Google Sign-In button
     - Implement student ID linking screen for roster mapping
@@ -261,7 +261,7 @@
     - Write widget tests for authentication screens
     - _Requirements: 1.1, 1.2, 1.3, 11.2, 11.3_
 
-  - [ ] 11.2 Implement home feed screen
+  - [x] 11.2 Implement home feed screen
 
     - Create infinite scroll feed with cursor-based pagination
     - Implement post display with images, videos, and text
@@ -270,7 +270,7 @@
     - Write widget tests for feed functionality
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 11.4_
 
-  - [ ] 11.3 Implement stories feature
+  - [x] 11.3 Implement stories feature
     - Create stories carousel at top of feed
     - Implement full-screen stories viewer with swipe navigation
     - Add story creation with camera/gallery integration
@@ -278,9 +278,9 @@
     - Write widget tests for stories functionality
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 11.4_
 
-- [ ] 12. Flutter UI Implementation - Social Features
+- [-] 12. Flutter UI Implementation - Social Features
 
-  - [ ] 12.1 Implement topics/discussions screen
+  - [x] 12.1 Implement topics/discussions screen
 
     - Create topics list with filtering by tags
     - Implement topic detail view with comments and voting
