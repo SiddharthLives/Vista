@@ -42,7 +42,7 @@ const postSchema = new mongoose.Schema(
           validate: {
             validator: function (v) {
               // Validate cloudinary public_id format for college folder structure
-              return /^college\/\d{4}-[A-Z]{2,4}\/dept-[A-Z]{2,4}\/section-[A-Z]\/student-\d{4}[A-Z]{2,4}\d{3,4}\//.test(
+              return /^college\/\d{1,4}-[A-Z]{2,4}\/dept-[A-Z]{2,4}\/section-[A-Z]\/student-\d{4}[A-Z]{2,4}\d{3,4}\//.test(
                 v
               );
             },
@@ -213,7 +213,10 @@ postSchema.methods.canBeViewedBy = function (
   viewerStudentId,
   viewerYear,
   viewerDept,
-  viewerSection
+  viewerSection,
+  authorYear,
+  authorDept,
+  authorSection
 ) {
   if (!this.isActive) return false;
 
@@ -221,14 +224,14 @@ postSchema.methods.canBeViewedBy = function (
     case "public":
       return true;
     case "year":
-      return viewerYear === this.authorYear;
+      return viewerYear === authorYear;
     case "dept":
-      return viewerDept === this.authorDept;
+      return viewerDept === authorDept;
     case "section":
       return (
-        viewerYear === this.authorYear &&
-        viewerDept === this.authorDept &&
-        viewerSection === this.authorSection
+        viewerYear === authorYear &&
+        viewerDept === authorDept &&
+        viewerSection === authorSection
       );
     default:
       return false;

@@ -356,7 +356,7 @@ commentSchema.statics.getCommentStats = function (authorStudentId) {
 };
 
 // Pre-save middleware
-commentSchema.pre("save", function (next) {
+commentSchema.pre("save", async function (next) {
   // Update updatedAt timestamp
   this.updatedAt = new Date();
 
@@ -366,29 +366,28 @@ commentSchema.pre("save", function (next) {
   // Set path for threading if this is a new comment
   if (this.isNew) {
     if (this.parentCommentId) {
-      // This is a reply - we need to find the parent comment's path
-      const Comment = this.constructor;
-      Comment.findById(this.parentCommentId)
-        .then((parentComment) => {
-          if (parentComment) {
-            this.path = `${parentComment.path}/${this._id}`;
-            this.level = parentComment.level + 1;
-          } else {
-            this.path = this._id.toString();
-            this.level = 0;
-          }
-          next();
-        })
-        .catch(next);
+      try {
+        // This is a reply - we need to find the parent comment's path
+        const Comment = this.constructor;
+        const parentComment = await Comment.findById(this.parentCommentId);
+        if (parentComment) {
+          this.path = `${parentComment.path}/${this._id}`;
+          this.level = parentComment.level + 1;
+        } else {
+          this.path = this._id.toString();
+          this.level = 0;
+        }
+      } catch (error) {
+        return next(error);
+      }
     } else {
       // Top-level comment
       this.path = this._id.toString();
       this.level = 0;
-      next();
     }
-  } else {
-    next();
   }
+
+  next();
 });
 
 // Pre-validate middleware

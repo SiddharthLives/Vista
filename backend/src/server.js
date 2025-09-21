@@ -6,18 +6,55 @@ const morgan = require("morgan");
 const mongoose = require("mongoose");
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const SocketService = require("./services/socketService");
+const NotificationService = require("./services/notificationService");
 require("dotenv").config();
 
 const app = express();
 const server = createServer(app);
 
-// Socket.IO setup
+// Socket.IO setup with Redis adapter configuration (commented for development)
 const io = new Server(server, {
   cors: {
     origin: process.env.FRONTEND_URL || "http://localhost:3000",
     methods: ["GET", "POST"],
+    credentials: true,
   },
+  transports: ["websocket", "polling"],
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
+
+// Redis adapter setup (commented for development)
+// Uncomment when scaling to multiple instances
+/*
+const { createAdapter } = require("@socket.io/redis-adapter");
+const { createClient } = require("redis");
+
+const pubClient = createClient({ 
+  url: process.env.REDIS_URL || "redis://localhost:6379" 
+});
+const subClient = pubClient.duplicate();
+
+Promise.all([pubClient.connect(), subClient.connect()]).then(() => {
+  io.adapter(createAdapter(pubClient, subClient));
+  console.log("Redis adapter connected for Socket.IO scaling");
+});
+*/
+
+// Initialize Socket.IO service and notification service
+let socketService;
+let notificationService;
+
+const initializeServices = () => {
+  socketService = new SocketService(io);
+  notificationService = new NotificationService(socketService);
+
+  // Set up bidirectional reference
+  socketService.setNotificationService(notificationService);
+
+  return { socketService, notificationService };
+};
 
 // Security middleware
 app.use(helmet());
@@ -49,7 +86,26 @@ app.get("/health", (req, res) => {
   });
 });
 
-// API routes will be added here
+// Import routes
+const authRoutes = require("./routes/auth");
+const mediaRoutes = require("./routes/media");
+const postsRoutes = require("./routes/posts");
+const storiesRoutes = require("./routes/stories");
+const topicsRoutes = require("./routes/topics");
+const usersRoutes = require("./routes/users");
+const chatRoutes = require("./routes/chat");
+const notificationRoutes = require("./routes/notifications");
+
+// API routes
+app.use("/auth", authRoutes);
+app.use("/media", mediaRoutes);
+app.use("/posts", postsRoutes);
+app.use("/stories", storiesRoutes);
+app.use("/topics", topicsRoutes);
+app.use("/users", usersRoutes);
+app.use("/chat", chatRoutes);
+app.use("/notifications", notificationRoutes);
+
 app.get("/", (req, res) => {
   res.json({
     message: "College Social Media API",
@@ -94,14 +150,9 @@ const connectDB = async () => {
   }
 };
 
-// Socket.IO connection handling
-io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
-});
+// Initialize Socket.IO service after database connection
+let socketServiceInstance;
+let notificationServiceInstance;
 
 // Start server
 const PORT = process.env.PORT || 3000;
@@ -109,9 +160,16 @@ const PORT = process.env.PORT || 3000;
 const startServer = async () => {
   await connectDB();
 
+  // Initialize Socket.IO and notification services after database connection
+  const services = initializeServices();
+  socketServiceInstance = services.socketService;
+  notificationServiceInstance = services.notificationService;
+  console.log("Socket.IO and notification services initialized");
+
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+    console.log("Socket.IO server ready for connections");
   });
 };
 
@@ -128,4 +186,10 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, server, io };
+module.exports = {
+  app,
+  server,
+  io,
+  getSocketService: () => socketServiceInstance,
+  getNotificationService: () => notificationServiceInstance,
+};
