@@ -1,0 +1,49 @@
+I’m building a social media app for my college (Android via Flutter + Web version). It should work like Instagram, but only for students. Here’s the full plan we already designed:
+
+Core Rules
+	•	Every student already has an account by default.
+	•	Student ID number is the unique ID (default username) and cannot be changed.
+	•	Students can log in with their student ID + password.
+	•	Categorization: each student is automatically tagged by year, department, and section.
+
+Features
+	1.	Feed Page (Instagram-style)
+	•	Students can post images, videos, captions, and comments.
+	•	Posts visible only to students within the college network.
+	•	Like, comment, and share within app.
+	2.	Profile Page
+	•	Shows posts, followers/following, and student info (ID, year, dept, section).
+	•	Option to update profile picture and bio (but not student ID).
+	3.	Explore / Search Page
+	•	Search by name, ID, year, department, section, or hashtags.
+	•	Trending posts (based on engagement).
+	4.	Messages (Direct Chat)
+	•	1-to-1 private messaging between students.
+	•	Group chats for sections/departments.
+	5.	Authentication & Accounts
+	•	Accounts linked to college database (so every student ID exists).
+	•	Option to reset password with college email.
+	6.	Categorization / Community
+	•	Auto-tagging by year, department, section.
+	•	Dedicated group pages for each section (like communities).
+	7.	Admin Panel
+	•	College admin can moderate content.
+	•	Admin can remove posts or ban users.
+
+Tech Stack
+	•	Frontend: Flutter (mobile), Flutter Web (for web).
+	•	Backend: Firebase (Authentication, Firestore for DB, Cloud Storage for media).
+	•	Notifications: Firebase Cloud Messaging.
+	•	Deployment: Play Store for Android, college subdomain for web.
+
+UI Reference
+	•	Similar to Instagram: bottom navigation (Feed, Search, Post, Notifications, Profile).
+	•	Clean, simple, modern UI with college branding colors.
+
+⸻
+
+👉 Based on this plan, generate:
+	1.	Project structure in Flutter (folders, files, state management suggestion).
+	2.	Firestore database schema design for posts, students, messages, and communities.
+	3.	Authentication flow (pre-created accounts with student ID).
+	4.	Example Flutter code snippets (login page, feed UI, posting).
