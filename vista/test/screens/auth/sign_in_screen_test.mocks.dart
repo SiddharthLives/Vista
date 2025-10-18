@@ -4,9 +4,10 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i3;
-import 'dart:ui' as _i4;
+import 'dart:ui' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:vista/models/user.dart' as _i4;
 import 'package:vista/providers/auth_provider.dart' as _i2;
 
 // ignore_for_file: type=lint
@@ -81,6 +82,15 @@ class MockAuthProvider extends _i1.Mock implements _i2.AuthProvider {
           as _i3.Future<void>);
 
   @override
+  _i3.Future<void> updateUser(_i4.User? updatedUser) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateUser, [updatedUser]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
   void clearError() => super.noSuchMethod(
     Invocation.method(#clearError, []),
     returnValueForMissingStub: null,
@@ -99,13 +109,13 @@ class MockAuthProvider extends _i1.Mock implements _i2.AuthProvider {
   );
 
   @override
-  void addListener(_i4.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i5.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i4.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i5.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );

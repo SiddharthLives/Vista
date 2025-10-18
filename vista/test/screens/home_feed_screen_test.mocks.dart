@@ -4,12 +4,13 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i3;
-import 'dart:ui' as _i4;
+import 'dart:ui' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:vista/models/post.dart' as _i6;
+import 'package:vista/models/post.dart' as _i7;
+import 'package:vista/models/user.dart' as _i4;
 import 'package:vista/providers/auth_provider.dart' as _i2;
-import 'package:vista/providers/feed_provider.dart' as _i5;
+import 'package:vista/providers/feed_provider.dart' as _i6;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -83,6 +84,15 @@ class MockAuthProvider extends _i1.Mock implements _i2.AuthProvider {
           as _i3.Future<void>);
 
   @override
+  _i3.Future<void> updateUser(_i4.User? updatedUser) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateUser, [updatedUser]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
   void clearError() => super.noSuchMethod(
     Invocation.method(#clearError, []),
     returnValueForMissingStub: null,
@@ -101,13 +111,13 @@ class MockAuthProvider extends _i1.Mock implements _i2.AuthProvider {
   );
 
   @override
-  void addListener(_i4.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i5.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i4.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i5.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );
@@ -128,15 +138,15 @@ class MockAuthProvider extends _i1.Mock implements _i2.AuthProvider {
 /// A class which mocks [FeedProvider].
 ///
 /// See the documentation for Mockito's code generation for more information.
-class MockFeedProvider extends _i1.Mock implements _i5.FeedProvider {
+class MockFeedProvider extends _i1.Mock implements _i6.FeedProvider {
   MockFeedProvider() {
     _i1.throwOnMissingStub(this);
   }
 
   @override
-  List<_i6.Post> get posts =>
-      (super.noSuchMethod(Invocation.getter(#posts), returnValue: <_i6.Post>[])
-          as List<_i6.Post>);
+  List<_i7.Post> get posts =>
+      (super.noSuchMethod(Invocation.getter(#posts), returnValue: <_i7.Post>[])
+          as List<_i7.Post>);
 
   @override
   bool get isInitialLoading =>
@@ -157,9 +167,26 @@ class MockFeedProvider extends _i1.Mock implements _i5.FeedProvider {
           as bool);
 
   @override
+  bool get isRealtimeConnected =>
+      (super.noSuchMethod(
+            Invocation.getter(#isRealtimeConnected),
+            returnValue: false,
+          )
+          as bool);
+
+  @override
   bool get hasListeners =>
       (super.noSuchMethod(Invocation.getter(#hasListeners), returnValue: false)
           as bool);
+
+  @override
+  _i3.Future<void> initializeRealtime() =>
+      (super.noSuchMethod(
+            Invocation.method(#initializeRealtime, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
 
   @override
   _i3.Future<void> loadInitialPosts() =>
@@ -197,13 +224,13 @@ class MockFeedProvider extends _i1.Mock implements _i5.FeedProvider {
           as _i3.Future<void>);
 
   @override
-  void addNewPost(_i6.Post? post) => super.noSuchMethod(
+  void addNewPost(_i7.Post? post) => super.noSuchMethod(
     Invocation.method(#addNewPost, [post]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void updatePost(_i6.Post? updatedPost) => super.noSuchMethod(
+  void updatePost(_i7.Post? updatedPost) => super.noSuchMethod(
     Invocation.method(#updatePost, [updatedPost]),
     returnValueForMissingStub: null,
   );
@@ -227,13 +254,13 @@ class MockFeedProvider extends _i1.Mock implements _i5.FeedProvider {
   );
 
   @override
-  void addListener(_i4.VoidCallback? listener) => super.noSuchMethod(
+  void addListener(_i5.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#addListener, [listener]),
     returnValueForMissingStub: null,
   );
 
   @override
-  void removeListener(_i4.VoidCallback? listener) => super.noSuchMethod(
+  void removeListener(_i5.VoidCallback? listener) => super.noSuchMethod(
     Invocation.method(#removeListener, [listener]),
     returnValueForMissingStub: null,
   );

@@ -4,6 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../providers/stories_provider.dart';
+import '../providers/auth_provider.dart';
+import '../services/cloudinary_upload_service.dart';
+import '../services/stories_api_service.dart';
+import '../services/logger_service.dart';
+import '../models/story.dart';
 import '../widgets/loading_widget.dart';
 
 enum StoryCreationSource { camera, gallery, video }
@@ -23,7 +28,10 @@ class StoryCreationScreen extends StatefulWidget {
 class _StoryCreationScreenState extends State<StoryCreationScreen> {
   XFile? _selectedFile;
   bool _isProcessing = false;
-  final ImagePicker _imagePicker = ImagePicker();
+  bool _isUploading = false;
+  double _uploadProgress = 0.0;
+  final CloudinaryUploadService _uploadService = CloudinaryUploadService();
+  final StoriesApiService _storiesService = StoriesApiService();
 
   @override
   void initState() {
@@ -35,42 +43,51 @@ class _StoryCreationScreenState extends State<StoryCreationScreen> {
 
   Future<void> _selectMedia() async {
     try {
-      XFile? file;
-      
       switch (widget.initialSource) {
         case StoryCreationSource.camera:
-          file = await _imagePicker.pickImage(
-            source: ImageSource.camera,
-            maxWidth: 1080,
-            maxHeight: 1920,
-            imageQuality: 85,
-          );
+          final result = await _uploadService.pickImageFromCamera(compress: true);
+          if (result.success && result.data != null) {
+            setState(() {
+              _selectedFile = result.data;
+            });
+          } else if (!result.success) {
+            _showErrorDialog(result.error?.message ?? 'Failed to take photo');
+            return;
+          } else {
+            Navigator.of(context).pop();
+          }
           break;
+          
         case StoryCreationSource.gallery:
-          file = await _imagePicker.pickImage(
-            source: ImageSource.gallery,
-            maxWidth: 1080,
-            maxHeight: 1920,
-            imageQuality: 85,
-          );
+          final result = await _uploadService.pickImageFromGallery(compress: true);
+          if (result.success && result.data != null) {
+            setState(() {
+              _selectedFile = result.data;
+            });
+          } else if (!result.success) {
+            _showErrorDialog(result.error?.message ?? 'Failed to pick image');
+            return;
+          } else {
+            Navigator.of(context).pop();
+          }
           break;
+          
         case StoryCreationSource.video:
-          file = await _imagePicker.pickVideo(
-            source: ImageSource.gallery,
-            maxDuration: const Duration(seconds: 30),
-          );
+          final result = await _uploadService.pickVideoFromGallery();
+          if (result.success && result.data != null) {
+            setState(() {
+              _selectedFile = result.data;
+            });
+          } else if (!result.success) {
+            _showErrorDialog(result.error?.message ?? 'Failed to pick video');
+            return;
+          } else {
+            Navigator.of(context).pop();
+          }
           break;
       }
-
-      if (file != null) {
-        setState(() {
-          _selectedFile = file;
-        });
-      } else {
-        // User cancelled selection, go back
-        Navigator.of(context).pop();
-      }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      LoggerService.error('Error selecting media for story', e, stackTrace);
       _showErrorDialog('Failed to select media: $e');
     }
   }
@@ -80,23 +97,56 @@ class _StoryCreationScreenState extends State<StoryCreationScreen> {
 
     setState(() {
       _isProcessing = true;
+      _isUploading = true;
+      _uploadProgress = 0.0;
     });
 
     try {
-      final storiesProvider = Provider.of<StoriesProvider>(context, listen: false);
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.user;
       
-      // Create story using the provider's method
-      if (widget.initialSource == StoryCreationSource.video) {
-        await storiesProvider.createStoryFromVideo();
-      } else {
-        // For camera and gallery, we need to create from the selected file
-        await _createStoryFromFile();
+      if (user == null || user.studentId == null) {
+        _showErrorDialog('You must be signed in to create a story');
+        return;
       }
 
+      // Upload media to Cloudinary
+      final uploadResult = await _uploadService.uploadFile(
+        _selectedFile!,
+        user.studentId!,
+        onProgress: (progress) {
+          setState(() {
+            _uploadProgress = progress;
+          });
+        },
+      );
+
+      setState(() {
+        _isUploading = false;
+      });
+
+      if (!uploadResult.success || uploadResult.data == null) {
+        throw Exception(uploadResult.error?.message ?? 'Failed to upload media');
+      }
+
+      // Create story via API
+      final storyRequest = CreateStoryRequest(
+        media: StoryMedia(
+          url: uploadResult.data!.secureUrl,
+          cloudinaryPublicId: uploadResult.data!.publicId,
+          width: uploadResult.data!.width,
+          height: uploadResult.data!.height,
+          duration: widget.initialSource == StoryCreationSource.video ? 30.0 : null,
+          type: widget.initialSource == StoryCreationSource.video 
+              ? StoryMediaType.video 
+              : StoryMediaType.image,
+        ),
+      );
+
+      final storyResult = await _storiesService.createStory(storyRequest);
+
       if (mounted) {
-        if (storiesProvider.error != null) {
-          _showErrorDialog(storiesProvider.error!);
-        } else {
+        if (storyResult.success) {
           // Success - go back to feed
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -105,9 +155,16 @@ class _StoryCreationScreenState extends State<StoryCreationScreen> {
               backgroundColor: Colors.green,
             ),
           );
+          
+          // Refresh stories in provider
+          final storiesProvider = Provider.of<StoriesProvider>(context, listen: false);
+          storiesProvider.refreshStories();
+        } else {
+          _showErrorDialog(storyResult.error?.message ?? 'Failed to create story');
         }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      LoggerService.error('Error creating story', e, stackTrace);
       if (mounted) {
         _showErrorDialog('Failed to create story: $e');
       }
@@ -115,6 +172,7 @@ class _StoryCreationScreenState extends State<StoryCreationScreen> {
       if (mounted) {
         setState(() {
           _isProcessing = false;
+          _isUploading = false;
         });
       }
     }
@@ -151,10 +209,12 @@ class _StoryCreationScreenState extends State<StoryCreationScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isProcessing) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Colors.black,
-        body: const LoadingWidget(
-          message: 'Creating your story...',
+        body: LoadingWidget(
+          message: _isUploading 
+              ? 'Uploading... ${(_uploadProgress * 100).toInt()}%'
+              : 'Creating your story...',
         ),
       );
     }

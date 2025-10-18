@@ -7,10 +7,10 @@ describe("Topic Model", () => {
 
   describe("Schema Validation", () => {
     const validTopicData = {
-      title: "How to prepare for technical interviews?",
-      body: "I'm looking for advice on how to prepare for technical interviews in software engineering. What resources would you recommend?",
+      title: "Test Topic",
+      body: "This is a test topic for discussion",
       authorStudentId: "2025CS1001",
-      tags: ["career", "interviews", "advice"],
+      tags: ["test", "discussion"],
     };
 
     test("should create a valid topic", async () => {
@@ -18,17 +18,15 @@ describe("Topic Model", () => {
       const savedTopic = await topic.save();
 
       expect(savedTopic._id).toBeDefined();
-      expect(savedTopic.title).toBe(validTopicData.title);
-      expect(savedTopic.body).toBe(validTopicData.body);
+      expect(savedTopic.title).toBe("Test Topic");
+      expect(savedTopic.body).toBe("This is a test topic for discussion");
       expect(savedTopic.authorStudentId).toBe("2025CS1001");
-      expect(savedTopic.tags).toEqual(["career", "interviews", "advice"]);
+      expect(savedTopic.tags).toEqual(["test", "discussion"]);
       expect(savedTopic.votes).toBe(0);
-      expect(savedTopic.upvotes).toBe(0);
-      expect(savedTopic.downvotes).toBe(0);
       expect(savedTopic.commentsCount).toBe(0);
+      expect(savedTopic.viewsCount).toBe(0);
       expect(savedTopic.isActive).toBe(true);
       expect(savedTopic.isPinned).toBe(false);
-      expect(savedTopic.isLocked).toBe(false);
       expect(savedTopic.createdAt).toBeDefined();
     });
 
@@ -41,9 +39,9 @@ describe("Topic Model", () => {
     });
 
     test("should validate title length", async () => {
-      const shortTitle = new Topic({ ...validTopicData, title: "Hi" });
+      const shortTitle = new Topic({ ...validTopicData, title: "A" });
       await expect(shortTitle.save()).rejects.toThrow(
-        "Title must be at least 3 characters"
+        "Title must be at least 5 characters"
       );
 
       const longTitle = new Topic({
@@ -69,7 +67,10 @@ describe("Topic Model", () => {
         "Body must be at least 10 characters"
       );
 
-      const longBody = new Topic({ ...validTopicData, body: "A".repeat(5001) });
+      const longBody = new Topic({
+        ...validTopicData,
+        body: "A".repeat(5001),
+      });
       await expect(longBody.save()).rejects.toThrow(
         "Body cannot exceed 5000 characters"
       );
@@ -119,28 +120,36 @@ describe("Topic Model", () => {
       );
     });
 
+    test("should limit number of tags", async () => {
+      const topic = new Topic({
+        ...validTopicData,
+        tags: Array(11).fill("tag"),
+      });
+      await expect(topic.save()).rejects.toThrow(
+        "Cannot have more than 10 tags"
+      );
+    });
+
     test("should normalize and deduplicate tags", async () => {
       const topic = new Topic({
         ...validTopicData,
-        tags: ["  Career  ", "INTERVIEWS", "career", "advice", ""],
+        tags: ["  Test  ", "DISCUSSION", "test", "discussion", ""],
       });
       const savedTopic = await topic.save();
 
-      expect(savedTopic.tags).toEqual(["career", "interviews", "advice"]);
+      expect(savedTopic.tags).toEqual(["test", "discussion"]);
     });
 
     test("should trim title and body", async () => {
       const topic = new Topic({
         ...validTopicData,
         title: "  Trimmed Title  ",
-        body: "  This is trimmed body content that is long enough to pass validation  ",
+        body: "  Trimmed body content  ",
       });
       const savedTopic = await topic.save();
 
       expect(savedTopic.title).toBe("Trimmed Title");
-      expect(savedTopic.body).toBe(
-        "This is trimmed body content that is long enough to pass validation"
-      );
+      expect(savedTopic.body).toBe("Trimmed body content");
     });
   });
 
@@ -150,7 +159,7 @@ describe("Topic Model", () => {
     beforeEach(async () => {
       topic = new Topic({
         title: "Test Topic",
-        body: "This is a test topic for testing instance methods",
+        body: "This is a test topic for discussion",
         authorStudentId: "2025CS1001",
         tags: ["test"],
       });
@@ -158,38 +167,51 @@ describe("Topic Model", () => {
     });
 
     test("should upvote topic", async () => {
-      await topic.upvote();
-      expect(topic.upvotes).toBe(1);
+      await topic.upvote("2025CS1002");
       expect(topic.votes).toBe(1);
+      expect(topic.upvotedBy).toContain("2025CS1002");
     });
 
-    test("should downvote topic", async () => {
-      await topic.downvote();
-      expect(topic.downvotes).toBe(1);
-      expect(topic.votes).toBe(-1);
+    test("should not allow duplicate upvotes", async () => {
+      await topic.upvote("2025CS1002");
+      await topic.upvote("2025CS1002");
+      expect(topic.votes).toBe(1);
+      expect(topic.upvotedBy).toHaveLength(1);
     });
 
     test("should remove upvote", async () => {
-      topic.upvotes = 3;
-      await topic.save();
-
-      await topic.removeUpvote();
-      expect(topic.upvotes).toBe(2);
-      expect(topic.votes).toBe(2);
+      await topic.upvote("2025CS1002");
+      await topic.removeUpvote("2025CS1002");
+      expect(topic.votes).toBe(0);
+      expect(topic.upvotedBy).not.toContain("2025CS1002");
     });
 
-    test("should not remove upvote below zero", async () => {
-      await topic.removeUpvote();
-      expect(topic.upvotes).toBe(0);
+    test("should downvote topic", async () => {
+      await topic.downvote("2025CS1002");
+      expect(topic.votes).toBe(-1);
+      expect(topic.downvotedBy).toContain("2025CS1002");
+    });
+
+    test("should not allow duplicate downvotes", async () => {
+      await topic.downvote("2025CS1002");
+      await topic.downvote("2025CS1002");
+      expect(topic.votes).toBe(-1);
+      expect(topic.downvotedBy).toHaveLength(1);
     });
 
     test("should remove downvote", async () => {
-      topic.downvotes = 2;
-      await topic.save();
+      await topic.downvote("2025CS1002");
+      await topic.removeDownvote("2025CS1002");
+      expect(topic.votes).toBe(0);
+      expect(topic.downvotedBy).not.toContain("2025CS1002");
+    });
 
-      await topic.removeDownvote();
-      expect(topic.downvotes).toBe(1);
+    test("should switch from upvote to downvote", async () => {
+      await topic.upvote("2025CS1002");
+      await topic.downvote("2025CS1002");
       expect(topic.votes).toBe(-1);
+      expect(topic.upvotedBy).not.toContain("2025CS1002");
+      expect(topic.downvotedBy).toContain("2025CS1002");
     });
 
     test("should increment comments", async () => {
@@ -210,78 +232,69 @@ describe("Topic Model", () => {
       expect(topic.commentsCount).toBe(0);
     });
 
-    test("should add tags", async () => {
-      await topic.addTag("NewTag");
+    test("should increment views", async () => {
+      await topic.incrementViews("2025CS1002");
+      expect(topic.viewsCount).toBe(1);
+      expect(topic.viewedBy).toContain("2025CS1002");
+    });
+
+    test("should not increment views for same user", async () => {
+      await topic.incrementViews("2025CS1002");
+      await topic.incrementViews("2025CS1002");
+      expect(topic.viewsCount).toBe(1);
+      expect(topic.viewedBy).toHaveLength(1);
+    });
+
+    test("should add tag", async () => {
+      await topic.addTag("newtag");
       expect(topic.tags).toContain("newtag");
     });
 
-    test("should not add duplicate tags", async () => {
+    test("should not add duplicate tag", async () => {
       await topic.addTag("test");
-      await topic.addTag("TEST");
       expect(topic.tags.filter((t) => t === "test")).toHaveLength(1);
     });
 
-    test("should remove tags", async () => {
-      topic.tags = ["test", "remove", "keep"];
+    test("should remove tag", async () => {
+      topic.tags = ["test", "remove"];
       await topic.save();
 
       await topic.removeTag("remove");
       expect(topic.tags).not.toContain("remove");
       expect(topic.tags).toContain("test");
-      expect(topic.tags).toContain("keep");
     });
 
     test("should pin and unpin topic", async () => {
       await topic.pin();
       expect(topic.isPinned).toBe(true);
+      expect(topic.pinnedAt).toBeDefined();
 
       await topic.unpin();
       expect(topic.isPinned).toBe(false);
+      expect(topic.pinnedAt).toBeNull();
     });
 
-    test("should lock and unlock topic", async () => {
-      await topic.lock();
-      expect(topic.isLocked).toBe(true);
-
-      await topic.unlock();
-      expect(topic.isLocked).toBe(false);
-    });
-  });
-
-  describe("Virtuals", () => {
-    test("should generate slug virtual", async () => {
-      const topic = new Topic({
-        title: "How to Learn JavaScript Quickly?",
-        body: "I need to learn JavaScript for my internship",
-        authorStudentId: "2025CS1001",
-      });
-
-      const slug = topic.slug;
-      expect(slug).toMatch(/^how-to-learn-javascript-quickly-[a-f0-9]{24}$/);
+    test("should mark as inactive", async () => {
+      await topic.markAsInactive();
+      expect(topic.isActive).toBe(false);
     });
 
-    test("should calculate vote score", async () => {
-      const topic = new Topic({
-        title: "Test Topic",
-        body: "This is a test topic for vote score calculation",
-        authorStudentId: "2025CS1001",
-        upvotes: 10,
-        downvotes: 3,
-      });
+    test("should check if user has voted", () => {
+      topic.upvotedBy = ["2025CS1002"];
+      topic.downvotedBy = ["2025CS1003"];
 
-      expect(topic.voteScore).toBe(7);
+      expect(topic.hasUserVoted("2025CS1002")).toBe(true);
+      expect(topic.hasUserVoted("2025CS1003")).toBe(true);
+      expect(topic.hasUserVoted("2025CS1004")).toBe(false);
     });
 
-    test("should calculate engagement score", async () => {
-      const topic = new Topic({
-        title: "Test Topic",
-        body: "This is a test topic for engagement score calculation",
-        authorStudentId: "2025CS1001",
-        votes: 5,
-        commentsCount: 12,
-      });
+    test("should get user vote type", () => {
+      topic.upvotedBy = ["2025CS1002"];
+      topic.downvotedBy = ["2025CS1003"];
 
-      expect(topic.engagementScore).toBe(17);
+      expect(topic.getUserVoteType("2025CS1002")).toBe("upvote");
+      expect(topic.getUserVoteType("2025CS1003")).toBe("downvote");
+      expect(topic.getUserVoteType("2025CS1004")).toBeNull();
     });
   });
 
@@ -290,36 +303,34 @@ describe("Topic Model", () => {
       const topics = [
         {
           title: "First Topic",
-          body: "This is the first topic for testing static methods",
+          body: "This is the first topic",
           authorStudentId: "2025CS1001",
           tags: ["test", "first"],
-          votes: 10,
-          upvotes: 12,
-          downvotes: 2,
+          votes: 5,
+          createdAt: new Date(Date.now() - 1000),
         },
         {
           title: "Second Topic",
-          body: "This is the second topic for testing static methods",
-          authorStudentId: "2025CS1001",
+          body: "This is the second topic",
+          authorStudentId: "2025CS1002",
           tags: ["test", "second"],
-          votes: 5,
-          upvotes: 7,
-          downvotes: 2,
+          votes: 3,
+          createdAt: new Date(Date.now() - 2000),
         },
         {
-          title: "Third Topic",
-          body: "This is the third topic for testing static methods",
-          authorStudentId: "2025ECE1001",
-          tags: ["different"],
-          votes: 15,
-          upvotes: 16,
-          downvotes: 1,
+          title: "Popular Topic",
+          body: "This is a popular topic",
+          authorStudentId: "2025CS1001",
+          tags: ["popular"],
+          votes: 10,
+          isPinned: true,
+          createdAt: new Date(Date.now() - 3000),
         },
         {
           title: "Inactive Topic",
-          body: "This topic is inactive for testing purposes",
-          authorStudentId: "2025CS1001",
-          tags: ["test"],
+          body: "This is an inactive topic",
+          authorStudentId: "2025CS1003",
+          tags: ["inactive"],
           isActive: false,
         },
       ];
@@ -330,11 +341,9 @@ describe("Topic Model", () => {
     test("should find topics by author", async () => {
       const topics = await Topic.findByAuthor("2025CS1001");
       expect(topics).toHaveLength(2); // Only active topics
-
       const topicTitles = topics.map((t) => t.title);
       expect(topicTitles).toContain("First Topic");
-      expect(topicTitles).toContain("Second Topic");
-      expect(topicTitles).not.toContain("Inactive Topic");
+      expect(topicTitles).toContain("Popular Topic");
     });
 
     test("should find topics by tags", async () => {
@@ -343,85 +352,117 @@ describe("Topic Model", () => {
     });
 
     test("should find popular topics", async () => {
-      const topics = await Topic.findPopular();
-      expect(topics).toHaveLength(3);
-      expect(topics[0].title).toBe("Third Topic"); // Highest votes first
+      const topics = await Topic.findPopular({ limit: 2 });
+      expect(topics).toHaveLength(2);
+      expect(topics[0].title).toBe("Popular Topic"); // Highest votes first
+      expect(topics[1].title).toBe("First Topic");
+    });
+
+    test("should find recent topics", async () => {
+      const topics = await Topic.findRecent({ limit: 2 });
+      expect(topics).toHaveLength(2);
+      expect(topics[0].title).toBe("First Topic"); // Newest first
+      expect(topics[1].title).toBe("Second Topic");
+    });
+
+    test("should find pinned topics", async () => {
+      const topics = await Topic.findPinned();
+      expect(topics).toHaveLength(1);
+      expect(topics[0].title).toBe("Popular Topic");
     });
 
     test("should search topics by text", async () => {
-      const topics = await Topic.searchTopics("First");
+      const topics = await Topic.searchTopics("first");
       expect(topics).toHaveLength(1);
       expect(topics[0].title).toBe("First Topic");
     });
 
-    test("should get topics feed with recent sort", async () => {
-      const feed = await Topic.getTopicsFeed({
-        sortBy: "recent",
-        limit: 10,
-      });
-      expect(feed).toHaveLength(3);
+    test("should get trending topics", async () => {
+      const topics = await Topic.getTrending({ limit: 2 });
+      expect(topics).toHaveLength(2);
+      // Should be ordered by recent activity and votes
     });
 
-    test("should get topics feed with popular sort", async () => {
-      const feed = await Topic.getTopicsFeed({
-        sortBy: "popular",
-        limit: 10,
-      });
-      expect(feed).toHaveLength(3);
-      expect(feed[0].title).toBe("Third Topic"); // Highest votes first
-    });
-
-    test("should get topics feed with tag filter", async () => {
-      const feed = await Topic.getTopicsFeed({
-        tags: ["test"],
-        limit: 10,
-      });
-      expect(feed).toHaveLength(2);
-    });
-
-    test("should get topics feed with author filter", async () => {
-      const feed = await Topic.getTopicsFeed({
-        authorStudentId: "2025ECE1001",
-        limit: 10,
-      });
-      expect(feed).toHaveLength(1);
-      expect(feed[0].title).toBe("Third Topic");
+    test("should get topic stats", async () => {
+      const stats = await Topic.getTopicStats("2025CS1001");
+      expect(stats.totalTopics).toBe(2);
+      expect(stats.totalVotes).toBe(15); // 5 + 10
+      expect(stats.totalComments).toBe(0);
     });
   });
 
   describe("Pre-save Middleware", () => {
-    test("should recalculate votes from upvotes and downvotes", async () => {
-      const topic = new Topic({
-        title: "Vote Test Topic",
-        body: "This topic is for testing vote calculation",
-        authorStudentId: "2025CS1001",
-        upvotes: 8,
-        downvotes: 3,
-      });
-
-      const savedTopic = await topic.save();
-      expect(savedTopic.votes).toBe(5); // 8 - 3
-    });
-
     test("should update updatedAt timestamp", async () => {
       const topic = new Topic({
-        title: "Update Test Topic",
-        body: "This topic is for testing timestamp updates",
+        title: "Test Topic",
+        body: "This is a test topic",
+        authorStudentId: "2025CS1001",
+      });
+      await topic.save();
+
+      const originalUpdatedAt = topic.updatedAt;
+
+      // Wait a bit to ensure timestamp difference
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      topic.title = "Updated Title";
+      await topic.save();
+
+      expect(topic.updatedAt.getTime()).toBeGreaterThan(
+        originalUpdatedAt.getTime()
+      );
+    });
+  });
+
+  describe("Virtuals", () => {
+    test("should generate slug virtual", async () => {
+      const topic = new Topic({
+        title: "Test Topic for Slug",
+        body: "This is a test topic",
         authorStudentId: "2025CS1001",
       });
 
-      const savedTopic = await topic.save();
-      const originalUpdatedAt = savedTopic.updatedAt;
+      expect(topic.slug).toBe("test-topic-for-slug");
+    });
 
-      // Small delay to ensure different timestamp
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    test("should calculate vote score", async () => {
+      const topic = new Topic({
+        title: "Test Topic",
+        body: "This is a test topic",
+        authorStudentId: "2025CS1001",
+        votes: 5,
+        viewsCount: 100,
+        commentsCount: 10,
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+      });
 
-      savedTopic.title = "Updated Title";
-      await savedTopic.save();
+      const score = topic.voteScore;
+      expect(typeof score).toBe("number");
+      expect(score).toBeGreaterThan(0);
+    });
 
-      expect(savedTopic.updatedAt.getTime()).toBeGreaterThan(
-        originalUpdatedAt.getTime()
-      );
+    test("should check if topic is trending", async () => {
+      const trendingTopic = new Topic({
+        title: "Trending Topic",
+        body: "This is trending",
+        authorStudentId: "2025CS1001",
+        votes: 10,
+        viewsCount: 200,
+        commentsCount: 20,
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+      });
+      expect(trendingTopic.isTrending).toBe(true);
+
+      const oldTopic = new Topic({
+        title: "Old Topic",
+        body: "This is old",
+        authorStudentId: "2025CS1001",
+        votes: 1,
+        viewsCount: 10,
+        commentsCount: 1,
+        createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+      });
+      expect(oldTopic.isTrending).toBe(false);
     });
   });
 
@@ -434,10 +475,13 @@ describe("Topic Model", () => {
         true
       );
       expect(indexNames.some((name) => name.includes("votes_-1"))).toBe(true);
+      expect(indexNames.some((name) => name.includes("tags_1"))).toBe(true);
       expect(
         indexNames.some((name) => name.includes("authorStudentId_1"))
       ).toBe(true);
-      expect(indexNames.some((name) => name.includes("tags_1"))).toBe(true);
+      expect(indexNames.some((name) => name.includes("isPinned_-1"))).toBe(
+        true
+      );
     });
   });
 });

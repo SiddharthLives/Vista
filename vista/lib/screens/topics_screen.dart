@@ -9,7 +9,9 @@ import 'topic_detail_screen.dart';
 import 'create_topic_screen.dart';
 
 class TopicsScreen extends StatefulWidget {
-  const TopicsScreen({super.key});
+  final bool showAppBar;
+  
+  const TopicsScreen({super.key, this.showAppBar = true});
 
   @override
   State<TopicsScreen> createState() => _TopicsScreenState();
@@ -84,7 +86,7 @@ class _TopicsScreenState extends State<TopicsScreen>
     super.build(context);
     
     return Scaffold(
-      appBar: AppBar(
+      appBar: widget.showAppBar ? AppBar(
         title: const Text('Topics'),
         elevation: 0,
         actions: [
@@ -110,7 +112,7 @@ class _TopicsScreenState extends State<TopicsScreen>
             ),
           ),
         ],
-      ),
+      ) : null,
       body: Column(
         children: [
           // Search bar

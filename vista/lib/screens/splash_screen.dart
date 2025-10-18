@@ -4,7 +4,7 @@ import '../config/app_config.dart';
 import '../providers/auth_provider.dart';
 import 'auth/sign_in_screen.dart';
 import 'auth/student_id_link_screen.dart';
-import 'home_feed_screen.dart';
+import 'main_navigation_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -48,9 +48,9 @@ class _SplashScreenState extends State<SplashScreen> {
           MaterialPageRoute(builder: (_) => const StudentIdLinkScreen()),
         );
       } else {
-        // User is fully authenticated, navigate to home
+        // User is fully authenticated, navigate to main navigation
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeFeedScreen()),
+          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
         );
       }
     } else {

@@ -1,105 +1,60 @@
 const Message = require("../../src/models/Message");
 const Conversation = require("../../src/models/Conversation");
-const mongoose = require("mongoose");
 
 describe("Message Model", () => {
-  let conversationId;
-
   beforeEach(async () => {
     await Message.deleteMany({});
     await Conversation.deleteMany({});
-
-    // Create a test conversation
-    const conversation = new Conversation({
-      participants: ["2025CS1001", "2025CS1002"],
-      type: "direct",
-    });
-    const savedConversation = await conversation.save();
-    conversationId = savedConversation._id;
   });
 
   describe("Schema Validation", () => {
-    const validTextMessageData = {
-      conversationId: null, // Will be set in tests
+    const validMessageData = {
+      conversationId: "507f1f77bcf86cd799439011",
       senderStudentId: "2025CS1001",
-      type: "text",
-      content: {
-        text: "Hello, how are you?",
-      },
-    };
-
-    const validImageMessageData = {
-      conversationId: null,
-      senderStudentId: "2025CS1001",
-      type: "image",
-      content: {
-        media: {
-          url: "https://res.cloudinary.com/test/image/upload/v123/college/2025-CS/dept-CS/section-A/student-2025CS1001/image.jpg",
-          cloudinaryPublicId:
-            "college/2025-CS/dept-CS/section-A/student-2025CS1001/image",
-          filename: "image.jpg",
-          mimeType: "image/jpeg",
-          width: 800,
-          height: 600,
-        },
-      },
-    };
-
-    const validSystemMessageData = {
-      conversationId: null,
-      senderStudentId: "system",
-      type: "system",
-      content: {
-        system: {
-          action: "user_joined",
-          metadata: { userName: "John Doe" },
-        },
-      },
+      text: "Hello, how are you?",
     };
 
     test("should create a valid text message", async () => {
-      const messageData = { ...validTextMessageData, conversationId };
-      const message = new Message(messageData);
+      const message = new Message(validMessageData);
       const savedMessage = await message.save();
 
       expect(savedMessage._id).toBeDefined();
-      expect(savedMessage.conversationId).toEqual(conversationId);
-      expect(savedMessage.senderStudentId).toBe("2025CS1001");
-      expect(savedMessage.type).toBe("text");
-      expect(savedMessage.content.text).toBe("Hello, how are you?");
-      expect(savedMessage.readBy).toHaveLength(0);
-      expect(savedMessage.deliveredTo).toHaveLength(0);
-      expect(savedMessage.isDeleted).toBe(false);
-      expect(savedMessage.createdAt).toBeDefined();
-    });
-
-    test("should create a valid image message", async () => {
-      const messageData = { ...validImageMessageData, conversationId };
-      const message = new Message(messageData);
-      const savedMessage = await message.save();
-
-      expect(savedMessage.type).toBe("image");
-      expect(savedMessage.content.media.url).toBe(
-        validImageMessageData.content.media.url
+      expect(savedMessage.conversationId.toString()).toBe(
+        "507f1f77bcf86cd799439011"
       );
-      expect(savedMessage.content.media.filename).toBe("image.jpg");
-      expect(savedMessage.content.media.width).toBe(800);
-      expect(savedMessage.content.media.height).toBe(600);
+      expect(savedMessage.senderStudentId).toBe("2025CS1001");
+      expect(savedMessage.text).toBe("Hello, how are you?");
+      expect(savedMessage.type).toBe("text");
+      expect(savedMessage.isActive).toBe(true);
+      expect(savedMessage.createdAt).toBeDefined();
+      expect(savedMessage.readBy).toHaveLength(0);
     });
 
-    test("should create a valid system message", async () => {
-      const messageData = { ...validSystemMessageData, conversationId };
-      const message = new Message(messageData);
+    test("should create a valid media message", async () => {
+      const mediaMessageData = {
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        type: "media",
+        media: {
+          url: "https://res.cloudinary.com/test/image/upload/v123/college/2025-CS/dept-CS/section-A/student-2025CS1001/photo.jpg",
+          cloudinaryPublicId:
+            "college/2025-CS/dept-CS/section-A/student-2025CS1001/photo",
+          mediaType: "image",
+          width: 800,
+          height: 600,
+        },
+      };
+
+      const message = new Message(mediaMessageData);
       const savedMessage = await message.save();
 
-      expect(savedMessage.type).toBe("system");
-      expect(savedMessage.senderStudentId).toBe("system");
-      expect(savedMessage.content.system.action).toBe("user_joined");
-      expect(savedMessage.content.system.metadata.userName).toBe("John Doe");
+      expect(savedMessage.type).toBe("media");
+      expect(savedMessage.media.url).toBe(mediaMessageData.media.url);
+      expect(savedMessage.media.mediaType).toBe("image");
     });
 
     test("should require conversationId", async () => {
-      const messageData = { ...validTextMessageData };
+      const messageData = { ...validMessageData };
       delete messageData.conversationId;
 
       const message = new Message(messageData);
@@ -108,8 +63,18 @@ describe("Message Model", () => {
       );
     });
 
+    test("should validate conversationId format", async () => {
+      const message = new Message({
+        ...validMessageData,
+        conversationId: "invalid-id",
+      });
+      await expect(message.save()).rejects.toThrow(
+        "Conversation ID must be a valid ObjectId"
+      );
+    });
+
     test("should require senderStudentId", async () => {
-      const messageData = { ...validTextMessageData, conversationId };
+      const messageData = { ...validMessageData };
       delete messageData.senderStudentId;
 
       const message = new Message(messageData);
@@ -123,8 +88,7 @@ describe("Message Model", () => {
 
       for (const invalidId of invalidIds) {
         const message = new Message({
-          ...validTextMessageData,
-          conversationId,
+          ...validMessageData,
           senderStudentId: invalidId,
         });
         await expect(message.save()).rejects.toThrow(
@@ -133,122 +97,114 @@ describe("Message Model", () => {
       }
     });
 
-    test("should validate message type enum", async () => {
+    test("should validate message type", async () => {
       const message = new Message({
-        ...validTextMessageData,
-        conversationId,
+        ...validMessageData,
         type: "invalid",
       });
       await expect(message.save()).rejects.toThrow(
-        "Message type must be one of"
+        "Message type must be either text or media"
       );
     });
 
-    test("should validate text message length", async () => {
+    test("should require text for text messages", async () => {
       const message = new Message({
-        ...validTextMessageData,
-        conversationId,
-        content: { text: "A".repeat(2001) },
+        ...validMessageData,
+        text: "",
+      });
+      await expect(message.save()).rejects.toThrow(
+        "Text is required for text messages"
+      );
+    });
+
+    test("should validate text length", async () => {
+      const message = new Message({
+        ...validMessageData,
+        text: "A".repeat(2001),
       });
       await expect(message.save()).rejects.toThrow(
         "Message text cannot exceed 2000 characters"
       );
     });
 
-    test("should validate media URL format", async () => {
-      const messageData = {
-        ...validImageMessageData,
-        conversationId,
-        content: {
-          media: {
-            ...validImageMessageData.content.media,
-            url: "invalid-url",
-          },
-        },
-      };
+    test("should require media for media messages", async () => {
+      const message = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        type: "media",
+      });
+      await expect(message.save()).rejects.toThrow(
+        "Media is required for media messages"
+      );
+    });
 
-      const message = new Message(messageData);
+    test("should validate media URL format", async () => {
+      const message = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        type: "media",
+        media: {
+          url: "invalid-url",
+          cloudinaryPublicId: "test/path",
+          mediaType: "image",
+        },
+      });
       await expect(message.save()).rejects.toThrow(
         "Media URL must be a valid HTTP/HTTPS URL"
       );
     });
 
     test("should validate cloudinary public ID format", async () => {
-      const messageData = {
-        ...validImageMessageData,
-        conversationId,
-        content: {
-          media: {
-            ...validImageMessageData.content.media,
-            cloudinaryPublicId: "invalid/path",
-          },
+      const message = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        type: "media",
+        media: {
+          url: "https://example.com/image.jpg",
+          cloudinaryPublicId: "invalid/path",
+          mediaType: "image",
         },
-      };
-
-      const message = new Message(messageData);
+      });
       await expect(message.save()).rejects.toThrow(
         "Cloudinary public ID must follow college folder structure"
       );
     });
 
-    test("should require text content for text messages", async () => {
+    test("should validate media type", async () => {
       const message = new Message({
-        conversationId,
+        conversationId: "507f1f77bcf86cd799439011",
         senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "" },
+        type: "media",
+        media: {
+          url: "https://example.com/file.pdf",
+          cloudinaryPublicId:
+            "college/2025-CS/dept-CS/section-A/student-2025CS1001/file",
+          mediaType: "document",
+        },
       });
       await expect(message.save()).rejects.toThrow(
-        "Text messages must have text content"
-      );
-    });
-
-    test("should require media content for image messages", async () => {
-      const message = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "image",
-        content: {},
-      });
-      await expect(message.save()).rejects.toThrow(
-        "image messages must have media content"
-      );
-    });
-
-    test("should require action for system messages", async () => {
-      const message = new Message({
-        conversationId,
-        senderStudentId: "system",
-        type: "system",
-        content: { system: {} },
-      });
-      await expect(message.save()).rejects.toThrow(
-        "System messages must have action"
+        "Media type must be either image or video"
       );
     });
 
     test("should validate readBy student IDs", async () => {
       const message = new Message({
-        ...validTextMessageData,
-        conversationId,
-        readBy: [{ studentId: "invalid-id" }],
+        ...validMessageData,
+        readBy: [{ studentId: "invalid-id", readAt: new Date() }],
       });
-
       await expect(message.save()).rejects.toThrow(
         "Student ID must follow format"
       );
     });
 
-    test("should trim text content and filename", async () => {
+    test("should trim text content", async () => {
       const message = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "  Trimmed message  " },
+        ...validMessageData,
+        text: "  This is trimmed text  ",
       });
       const savedMessage = await message.save();
 
-      expect(savedMessage.content.text).toBe("Trimmed message");
+      expect(savedMessage.text).toBe("This is trimmed text");
     });
   });
 
@@ -257,15 +213,14 @@ describe("Message Model", () => {
 
     beforeEach(async () => {
       message = new Message({
-        conversationId,
+        conversationId: "507f1f77bcf86cd799439011",
         senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Test message" },
+        text: "Test message",
       });
       await message.save();
     });
 
-    test("should mark message as read", async () => {
+    test("should mark as read by user", async () => {
       await message.markAsRead("2025CS1002");
 
       expect(message.readBy).toHaveLength(1);
@@ -273,217 +228,62 @@ describe("Message Model", () => {
       expect(message.readBy[0].readAt).toBeDefined();
     });
 
-    test("should not add duplicate read receipts", async () => {
+    test("should not add duplicate read status", async () => {
       await message.markAsRead("2025CS1002");
       await message.markAsRead("2025CS1002");
 
       expect(message.readBy).toHaveLength(1);
     });
 
-    test("should mark message as delivered", async () => {
-      await message.markAsDelivered("2025CS1002");
+    test("should check if read by user", async () => {
+      await message.markAsRead("2025CS1002");
 
-      expect(message.deliveredTo).toHaveLength(1);
-      expect(message.deliveredTo[0].studentId).toBe("2025CS1002");
-      expect(message.deliveredTo[0].deliveredAt).toBeDefined();
+      expect(message.isReadBy("2025CS1002")).toBe(true);
+      expect(message.isReadBy("2025CS1003")).toBe(false);
     });
 
-    test("should not add duplicate delivery receipts", async () => {
-      await message.markAsDelivered("2025CS1002");
-      await message.markAsDelivered("2025CS1002");
+    test("should get read status for user", async () => {
+      await message.markAsRead("2025CS1002");
 
-      expect(message.deliveredTo).toHaveLength(1);
+      const readStatus = message.getReadStatus("2025CS1002");
+      expect(readStatus).toBeTruthy();
+      expect(readStatus.readAt).toBeDefined();
+
+      const noReadStatus = message.getReadStatus("2025CS1003");
+      expect(noReadStatus).toBeNull();
     });
 
-    test("should edit text message content", async () => {
-      await message.editContent("Edited message");
+    test("should mark as inactive", async () => {
+      await message.markAsInactive();
+      expect(message.isActive).toBe(false);
+    });
 
-      expect(message.content.text).toBe("Edited message");
+    test("should update text content", async () => {
+      const newText = "Updated message text";
+      await message.updateText(newText);
+
+      expect(message.text).toBe(newText);
+      expect(message.isEdited).toBe(true);
       expect(message.editedAt).toBeDefined();
-      expect(message.isEdited).toBe(true);
     });
 
-    test("should not allow editing non-text messages", async () => {
-      const imageMessage = new Message({
-        conversationId,
+    test("should not update text for media messages", async () => {
+      const mediaMessage = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
         senderStudentId: "2025CS1001",
-        type: "image",
-        content: {
-          media: {
-            url: "https://example.com/image.jpg",
-            cloudinaryPublicId:
-              "college/2025-CS/dept-CS/section-A/student-2025CS1001/image",
-          },
+        type: "media",
+        media: {
+          url: "https://example.com/image.jpg",
+          cloudinaryPublicId:
+            "college/2025-CS/dept-CS/section-A/student-2025CS1001/image",
+          mediaType: "image",
         },
       });
+      await mediaMessage.save();
 
-      await expect(imageMessage.editContent("New text")).rejects.toThrow(
-        "Only text messages can be edited"
+      await expect(mediaMessage.updateText("New text")).rejects.toThrow(
+        "Cannot update text for media messages"
       );
-    });
-
-    test("should soft delete message for specific user", async () => {
-      await message.softDelete("2025CS1002");
-
-      expect(message.deletedFor).toContain("2025CS1002");
-      expect(message.isDeleted).toBe(false);
-    });
-
-    test("should soft delete message for everyone", async () => {
-      await message.softDelete();
-
-      expect(message.isDeleted).toBe(true);
-      expect(message.deletedAt).toBeDefined();
-    });
-
-    test("should restore deleted message", async () => {
-      message.isDeleted = true;
-      message.deletedAt = new Date();
-      message.deletedFor = ["2025CS1002"];
-      await message.save();
-
-      await message.restore();
-      expect(message.isDeleted).toBe(false);
-      expect(message.deletedAt).toBeNull();
-      expect(message.deletedFor).toHaveLength(0);
-    });
-
-    test("should generate system message text", async () => {
-      const systemMessage = new Message({
-        conversationId,
-        senderStudentId: "system",
-        type: "system",
-        content: {
-          system: {
-            action: "user_joined",
-            metadata: { userName: "John Doe" },
-          },
-        },
-      });
-
-      expect(systemMessage.getSystemMessageText()).toBe(
-        "John Doe joined the conversation"
-      );
-    });
-
-    test("should check if message can be edited by user", () => {
-      expect(message.canBeEditedBy("2025CS1001")).toBe(true);
-      expect(message.canBeEditedBy("2025CS1002")).toBe(false);
-
-      // Test time limit (15 minutes) - create a new message with old timestamp
-      const oldMessage = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Old message" },
-        createdAt: new Date(Date.now() - 16 * 60 * 1000),
-      });
-      expect(oldMessage.canBeEditedBy("2025CS1001")).toBe(false);
-    });
-
-    test("should check if message can be deleted by user", () => {
-      expect(message.canBeDeletedBy("2025CS1001")).toBe(true);
-      expect(message.canBeDeletedBy("2025CS1002")).toBe(false);
-
-      message.isDeleted = true;
-      expect(message.canBeDeletedBy("2025CS1001")).toBe(false);
-    });
-
-    test("should check if message is visible to user", () => {
-      expect(message.isVisibleTo("2025CS1001")).toBe(true);
-      expect(message.isVisibleTo("2025CS1002")).toBe(true);
-
-      message.deletedFor.push("2025CS1002");
-      expect(message.isVisibleTo("2025CS1002")).toBe(false);
-
-      message.isDeleted = true;
-      expect(message.isVisibleTo("2025CS1001")).toBe(false);
-    });
-  });
-
-  describe("Virtuals", () => {
-    test("should check if message is edited", async () => {
-      const message = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Test message" },
-      });
-
-      expect(message.isEdited).toBe(false);
-
-      message.editedAt = new Date();
-      expect(message.isEdited).toBe(true);
-    });
-
-    test("should check if message has media", async () => {
-      const textMessage = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Test message" },
-      });
-      expect(textMessage.hasMedia).toBe(false);
-
-      const imageMessage = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "image",
-        content: {
-          media: {
-            url: "https://example.com/image.jpg",
-            cloudinaryPublicId:
-              "college/2025-CS/dept-CS/section-A/student-2025CS1001/image",
-          },
-        },
-      });
-      expect(imageMessage.hasMedia).toBe(true);
-    });
-
-    test("should get display content", async () => {
-      const textMessage = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Hello world" },
-      });
-      expect(textMessage.displayContent).toBe("Hello world");
-
-      const imageMessage = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "image",
-        content: { media: { url: "https://example.com/image.jpg" } },
-      });
-      expect(imageMessage.displayContent).toBe("[Image]");
-
-      const deletedMessage = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Deleted content" },
-        isDeleted: true,
-      });
-      expect(deletedMessage.displayContent).toBe("[deleted]");
-    });
-
-    test("should check read and delivery status", async () => {
-      const message = new Message({
-        conversationId,
-        senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "Test message" },
-        readBy: [{ studentId: "2025CS1002" }],
-        deliveredTo: [{ studentId: "2025CS1002" }],
-      });
-
-      const isReadBy = message.isReadBy;
-      const isDeliveredTo = message.isDeliveredTo;
-
-      expect(isReadBy("2025CS1002")).toBe(true);
-      expect(isReadBy("2025ECE1001")).toBe(false);
-      expect(isDeliveredTo("2025CS1002")).toBe(true);
-      expect(isDeliveredTo("2025ECE1001")).toBe(false);
     });
   });
 
@@ -491,38 +291,28 @@ describe("Message Model", () => {
     beforeEach(async () => {
       const messages = [
         {
-          conversationId,
+          conversationId: "507f1f77bcf86cd799439011",
           senderStudentId: "2025CS1001",
-          type: "text",
-          content: { text: "First message" },
+          text: "First message",
           createdAt: new Date(Date.now() - 3000),
         },
         {
-          conversationId,
+          conversationId: "507f1f77bcf86cd799439011",
           senderStudentId: "2025CS1002",
-          type: "text",
-          content: { text: "Second message" },
+          text: "Second message",
           createdAt: new Date(Date.now() - 2000),
         },
         {
-          conversationId,
+          conversationId: "507f1f77bcf86cd799439012",
           senderStudentId: "2025CS1001",
-          type: "image",
-          content: {
-            media: {
-              url: "https://example.com/image.jpg",
-              cloudinaryPublicId:
-                "college/2025-CS/dept-CS/section-A/student-2025CS1001/image",
-            },
-          },
+          text: "Different conversation",
           createdAt: new Date(Date.now() - 1000),
         },
         {
-          conversationId,
+          conversationId: "507f1f77bcf86cd799439011",
           senderStudentId: "2025CS1001",
-          type: "text",
-          content: { text: "Deleted message" },
-          isDeleted: true,
+          text: "Inactive message",
+          isActive: false,
         },
       ];
 
@@ -530,99 +320,105 @@ describe("Message Model", () => {
     });
 
     test("should find messages by conversation", async () => {
-      const messages = await Message.findByConversation(conversationId);
-      expect(messages).toHaveLength(3); // Only non-deleted messages
-
-      // Should be sorted by createdAt desc (newest first)
-      expect(messages[0].type).toBe("image");
-      expect(messages[1].content.text).toBe("Second message");
-      expect(messages[2].content.text).toBe("First message");
+      const messages = await Message.findByConversation(
+        "507f1f77bcf86cd799439011"
+      );
+      expect(messages).toHaveLength(2); // Only active messages
+      expect(messages[0].text).toBe("Second message"); // Newest first
+      expect(messages[1].text).toBe("First message");
     });
 
     test("should find messages by sender", async () => {
       const messages = await Message.findBySender("2025CS1001");
-      expect(messages).toHaveLength(2); // Only non-deleted messages from CS1001
+      expect(messages).toHaveLength(2); // Only active messages
     });
 
-    test("should search messages in conversation", async () => {
-      const messages = await Message.searchMessages(conversationId, "First");
+    test("should get conversation messages with pagination", async () => {
+      const result = await Message.getConversationMessages(
+        "507f1f77bcf86cd799439011",
+        { limit: 1 }
+      );
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].text).toBe("Second message");
+      expect(result.hasMore).toBe(true);
+    });
+
+    test("should search messages by text", async () => {
+      const messages = await Message.searchMessages("First");
       expect(messages).toHaveLength(1);
-      expect(messages[0].content.text).toBe("First message");
+      expect(messages[0].text).toBe("First message");
     });
 
-    test("should find unread messages", async () => {
-      const messages = await Message.findUnreadMessages(
-        conversationId,
-        "2025CS1001"
-      );
-      expect(messages).toHaveLength(1); // Only message from CS1002
-      expect(messages[0].senderStudentId).toBe("2025CS1002");
-    });
+    test("should get unread messages for user", async () => {
+      // Mark one message as read
+      const message = await Message.findOne({ text: "First message" });
+      await message.markAsRead("2025CS1002");
 
-    test("should mark conversation as read", async () => {
-      const result = await Message.markConversationAsRead(
-        conversationId,
-        "2025CS1001"
-      );
-      expect(result.modifiedCount).toBeGreaterThan(0);
-
-      // Verify messages are marked as read
-      const unreadMessages = await Message.findUnreadMessages(
-        conversationId,
-        "2025CS1001"
-      );
-      expect(unreadMessages).toHaveLength(0);
+      const unreadMessages = await Message.getUnreadMessages("2025CS1002");
+      expect(unreadMessages).toHaveLength(1);
+      expect(unreadMessages[0].text).toBe("Second message");
     });
 
     test("should get message stats", async () => {
-      const stats = await Message.getMessageStats(conversationId);
-      expect(stats).toHaveLength(2); // text and image types
-
-      const textStats = stats.find((s) => s._id === "text");
-      const imageStats = stats.find((s) => s._id === "image");
-
-      expect(textStats.count).toBe(2);
-      expect(imageStats.count).toBe(1);
-    });
-
-    test("should create system message", async () => {
-      const systemMessage = await Message.createSystemMessage(
-        conversationId,
-        "user_joined",
-        { userName: "John Doe" }
-      );
-
-      expect(systemMessage.type).toBe("system");
-      expect(systemMessage.senderStudentId).toBe("system");
-      expect(systemMessage.content.system.action).toBe("user_joined");
-      expect(systemMessage.content.system.metadata.userName).toBe("John Doe");
+      const stats = await Message.getMessageStats("2025CS1001");
+      expect(stats.totalMessages).toBe(2);
+      expect(stats.textMessages).toBe(2);
+      expect(stats.mediaMessages).toBe(0);
     });
   });
 
-  describe("JSON Transform", () => {
-    test("should hide content for deleted messages", async () => {
-      const message = new Message({
-        conversationId,
+  describe("Virtuals", () => {
+    test("should check if message is media", async () => {
+      const textMessage = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
         senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "This will be deleted" },
-        isDeleted: true,
+        text: "Text message",
       });
+      expect(textMessage.isMedia).toBe(false);
 
-      const json = message.toJSON();
-      expect(json.content.text).toBe("[deleted]");
+      const mediaMessage = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        type: "media",
+        media: {
+          url: "https://example.com/image.jpg",
+          cloudinaryPublicId:
+            "college/2025-CS/dept-CS/section-A/student-2025CS1001/image",
+          mediaType: "image",
+        },
+      });
+      expect(mediaMessage.isMedia).toBe(true);
     });
 
-    test("should show content for non-deleted messages", async () => {
+    test("should get read count", async () => {
       const message = new Message({
-        conversationId,
+        conversationId: "507f1f77bcf86cd799439011",
         senderStudentId: "2025CS1001",
-        type: "text",
-        content: { text: "This is visible content" },
+        text: "Test message",
+        readBy: [
+          { studentId: "2025CS1002", readAt: new Date() },
+          { studentId: "2025CS1003", readAt: new Date() },
+        ],
       });
+      expect(message.readCount).toBe(2);
+    });
 
-      const json = message.toJSON();
-      expect(json.content.text).toBe("This is visible content");
+    test("should check if message is recent", async () => {
+      const recentMessage = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        text: "Recent message",
+        createdAt: new Date(),
+      });
+      expect(recentMessage.isRecent).toBe(true);
+
+      const oldMessage = new Message({
+        conversationId: "507f1f77bcf86cd799439011",
+        senderStudentId: "2025CS1001",
+        text: "Old message",
+        createdAt: new Date(Date.now() - 25 * 60 * 60 * 1000), // 25 hours ago
+      });
+      expect(oldMessage.isRecent).toBe(false);
     });
   });
 
@@ -634,12 +430,13 @@ describe("Message Model", () => {
       expect(indexNames.some((name) => name.includes("conversationId_1"))).toBe(
         true
       );
-      expect(
-        indexNames.some((name) => name.includes("senderStudentId_1"))
-      ).toBe(true);
       expect(indexNames.some((name) => name.includes("createdAt_-1"))).toBe(
         true
       );
+      expect(
+        indexNames.some((name) => name.includes("senderStudentId_1"))
+      ).toBe(true);
+      expect(indexNames.some((name) => name.includes("isActive_1"))).toBe(true);
     });
   });
 });

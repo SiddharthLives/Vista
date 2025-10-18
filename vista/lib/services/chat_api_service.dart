@@ -246,25 +246,7 @@ class ConversationsFeedResponse {
   }
 }
 
-class ConversationWithParticipants {
-  final Conversation conversation;
-  final List<User> participants;
 
-  const ConversationWithParticipants({
-    required this.conversation,
-    required this.participants,
-  });
-
-  factory ConversationWithParticipants.fromJson(Map<String, dynamic> json) {
-    return ConversationWithParticipants(
-      conversation: Conversation.fromJson(json),
-      participants: (json['participantDetails'] as List<dynamic>?)
-              ?.map((item) => User.fromJson(item))
-              .toList() ??
-          [],
-    );
-  }
-}
 
 class MessagesFeedResponse {
   final List<Message> messages;

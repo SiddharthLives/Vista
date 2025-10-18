@@ -8,6 +8,7 @@ import 'dart:ui' as _i5;
 
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:vista/models/story.dart' as _i3;
+import 'package:vista/models/user.dart' as _i7;
 import 'package:vista/providers/auth_provider.dart' as _i6;
 import 'package:vista/providers/stories_provider.dart' as _i2;
 
@@ -217,6 +218,15 @@ class MockAuthProvider extends _i1.Mock implements _i6.AuthProvider {
   _i4.Future<void> signOut() =>
       (super.noSuchMethod(
             Invocation.method(#signOut, []),
+            returnValue: _i4.Future<void>.value(),
+            returnValueForMissingStub: _i4.Future<void>.value(),
+          )
+          as _i4.Future<void>);
+
+  @override
+  _i4.Future<void> updateUser(_i7.User? updatedUser) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateUser, [updatedUser]),
             returnValue: _i4.Future<void>.value(),
             returnValueForMissingStub: _i4.Future<void>.value(),
           )

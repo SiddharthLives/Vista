@@ -156,6 +156,22 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Update user profile
+  Future<void> updateUser(app_user.User updatedUser) async {
+    try {
+      _user = updatedUser;
+      
+      // User data will be updated on next API call
+      // The auth service doesn't have a direct storeUser method
+      
+      notifyListeners();
+      LoggerService.info('User profile updated successfully');
+    } catch (e, stackTrace) {
+      LoggerService.error('Error updating user profile', e, stackTrace);
+      setError('Failed to update user profile');
+    }
+  }
+
   /// Clear error
   void clearError() {
     setError(null);

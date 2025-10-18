@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../models/post.dart';
 import '../providers/auth_provider.dart';
 import '../services/posts_api_service.dart';
-import '../services/media_api_service.dart';
+import '../services/cloudinary_upload_service.dart';
 import '../services/logger_service.dart';
 
 class PostComposer extends StatefulWidget {
@@ -27,12 +27,13 @@ class _PostComposerState extends State<PostComposer> {
   final TextEditingController _textController = TextEditingController();
   final TextEditingController _tagsController = TextEditingController();
   final PostsApiService _postsService = PostsApiService();
-  final MediaApiService _mediaService = MediaApiService();
-  final ImagePicker _imagePicker = ImagePicker();
+  final CloudinaryUploadService _uploadService = CloudinaryUploadService();
 
   PostVisibility _selectedVisibility = PostVisibility.public;
   List<XFile> _selectedImages = [];
   bool _isLoading = false;
+  bool _isUploading = false;
+  double _uploadProgress = 0.0;
   String? _error;
 
   @override
@@ -44,16 +45,17 @@ class _PostComposerState extends State<PostComposer> {
 
   Future<void> _pickImages() async {
     try {
-      final List<XFile> images = await _imagePicker.pickMultiImage(
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 85,
+      final result = await _uploadService.pickMultipleImages(
+        maxImages: 5,
+        compress: true,
       );
       
-      if (images.isNotEmpty) {
+      if (result.success && result.data != null && result.data!.isNotEmpty) {
         setState(() {
-          _selectedImages = images.take(5).toList(); // Limit to 5 images
+          _selectedImages = result.data!;
         });
+      } else if (!result.success) {
+        _showError(result.error?.message ?? 'Failed to pick images');
       }
     } catch (e, stackTrace) {
       LoggerService.error('Error picking images', e, stackTrace);
@@ -63,17 +65,14 @@ class _PostComposerState extends State<PostComposer> {
 
   Future<void> _pickCamera() async {
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1920,
-        maxHeight: 1920,
-        imageQuality: 85,
-      );
+      final result = await _uploadService.pickImageFromCamera(compress: true);
       
-      if (image != null) {
+      if (result.success && result.data != null) {
         setState(() {
-          _selectedImages = [image];
+          _selectedImages = [result.data!];
         });
+      } else if (!result.success) {
+        _showError(result.error?.message ?? 'Failed to take photo');
       }
     } catch (e, stackTrace) {
       LoggerService.error('Error taking photo', e, stackTrace);
@@ -113,37 +112,35 @@ class _PostComposerState extends State<PostComposer> {
       
       // Upload images if any
       if (_selectedImages.isNotEmpty) {
-        mediaItems = [];
-        
-        for (final image in _selectedImages) {
-          // Get signed upload parameters
-          final signResponse = await _mediaService.getSignedUploadParams(
-            filename: image.name,
-            mimeType: 'image/jpeg',
-            studentId: user.studentId!,
-          );
-          
-          if (!signResponse.success || signResponse.data == null) {
-            throw Exception('Failed to get upload parameters');
-          }
-          
-          // Upload to Cloudinary
-          final uploadResponse = await _mediaService.uploadToCloudinary(
-            image,
-            signResponse.data!,
-          );
-          
-          if (!uploadResponse.success || uploadResponse.data == null) {
-            throw Exception('Failed to upload image');
-          }
-          
-          mediaItems.add(MediaItem(
-            url: uploadResponse.data!.secureUrl,
-            cloudinaryPublicId: uploadResponse.data!.publicId,
-            width: uploadResponse.data!.width,
-            height: uploadResponse.data!.height,
-          ));
+        setState(() {
+          _isUploading = true;
+          _uploadProgress = 0.0;
+        });
+
+        final uploadResult = await _uploadService.uploadMultipleFiles(
+          _selectedImages,
+          user.studentId!,
+          onProgress: (completed, total, overallProgress) {
+            setState(() {
+              _uploadProgress = overallProgress;
+            });
+          },
+        );
+
+        setState(() {
+          _isUploading = false;
+        });
+
+        if (!uploadResult.success || uploadResult.data == null) {
+          throw Exception(uploadResult.error?.message ?? 'Failed to upload images');
         }
+
+        mediaItems = uploadResult.data!.map((upload) => MediaItem(
+          url: upload.secureUrl,
+          cloudinaryPublicId: upload.publicId,
+          width: upload.width,
+          height: upload.height,
+        )).toList();
       }
 
       // Parse tags
@@ -219,6 +216,7 @@ class _PostComposerState extends State<PostComposer> {
                   _buildTextInput(),
                   const SizedBox(height: 16),
                   if (_selectedImages.isNotEmpty) _buildImagePreview(),
+                  if (_isUploading) _buildUploadProgress(),
                   const SizedBox(height: 16),
                   _buildTagsInput(),
                   const SizedBox(height: 16),
@@ -412,26 +410,65 @@ class _PostComposerState extends State<PostComposer> {
     );
   }
 
+  Widget _buildUploadProgress() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cloud_upload),
+              const SizedBox(width: 8),
+              Text(
+                'Uploading images...',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const Spacer(),
+              Text(
+                '${(_uploadProgress * 100).toInt()}%',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: _uploadProgress,
+            backgroundColor: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButtons() {
+    final isDisabled = _isLoading || _isUploading;
+    
     return Row(
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+            onPressed: isDisabled ? null : () => Navigator.of(context).pop(),
             child: const Text('Cancel'),
           ),
         ),
         const SizedBox(width: 16),
         Expanded(
           child: ElevatedButton(
-            onPressed: _isLoading ? null : _createPost,
+            onPressed: isDisabled ? null : _createPost,
             child: _isLoading
                 ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Post'),
+                : _isUploading
+                    ? const Text('Uploading...')
+                    : const Text('Post'),
           ),
         ),
       ],

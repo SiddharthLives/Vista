@@ -3,9 +3,11 @@ import 'package:flutter/foundation.dart';
 import '../models/post.dart';
 import '../services/posts_api_service.dart';
 import '../services/logger_service.dart';
+import '../providers/realtime_provider.dart';
 
 class FeedProvider extends ChangeNotifier {
   final PostsApiService _postsService = PostsApiService();
+  final RealtimeProvider _realtimeProvider = RealtimeProvider();
 
   List<Post> _posts = [];
   bool _isInitialLoading = false;
@@ -20,6 +22,94 @@ class FeedProvider extends ChangeNotifier {
   bool get isLoadingMore => _isLoadingMore;
   String? get error => _error;
   bool get hasMore => _hasMore;
+  bool get isRealtimeConnected => _realtimeProvider.isConnected;
+
+  /// Initialize real-time functionality for feed updates
+  Future<void> initializeRealtime() async {
+    try {
+      // Set up real-time event callbacks
+      _realtimeProvider.setOnLikeReceived(_handleRealtimeLike);
+      _realtimeProvider.setOnCommentReceived(_handleRealtimeComment);
+      
+      // Connect to real-time service if not already connected
+      if (!_realtimeProvider.isConnected) {
+        await _realtimeProvider.connect();
+      }
+      
+      LoggerService.info('Real-time feed functionality initialized');
+    } catch (e, stackTrace) {
+      LoggerService.error('Failed to initialize real-time feed functionality', e, stackTrace);
+    }
+  }
+
+  /// Handle real-time like events
+  void _handleRealtimeLike(Map<String, dynamic> data) {
+    final postId = data['postId'] as String?;
+    final likesCount = data['likesCount'] as int?;
+    final isLiked = data['isLiked'] as bool? ?? false;
+    
+    if (postId != null && likesCount != null) {
+      _updatePostLikes(postId, likesCount);
+      LoggerService.debug('Real-time like update: $postId (${isLiked ? 'liked' : 'unliked'})');
+    }
+  }
+
+  /// Handle real-time comment events
+  void _handleRealtimeComment(Map<String, dynamic> data) {
+    final postId = data['postId'] as String?;
+    final commentsCount = data['commentsCount'] as int?;
+    
+    if (postId != null && commentsCount != null) {
+      _updatePostComments(postId, commentsCount);
+      LoggerService.debug('Real-time comment update: $postId');
+    }
+  }
+
+  /// Update post likes count in local feed
+  void _updatePostLikes(String postId, int likesCount) {
+    final postIndex = _posts.indexWhere((post) => post.id == postId);
+    if (postIndex != -1) {
+      final post = _posts[postIndex];
+      final updatedPost = Post(
+        id: post.id,
+        authorStudentId: post.authorStudentId,
+        type: post.type,
+        media: post.media,
+        text: post.text,
+        visibility: post.visibility,
+        tags: post.tags,
+        likesCount: likesCount,
+        commentsCount: post.commentsCount,
+        createdAt: post.createdAt,
+        author: post.author,
+      );
+      _posts[postIndex] = updatedPost;
+      notifyListeners();
+    }
+  }
+
+  /// Update post comments count in local feed
+  void _updatePostComments(String postId, int commentsCount) {
+    final postIndex = _posts.indexWhere((post) => post.id == postId);
+    if (postIndex != -1) {
+      final post = _posts[postIndex];
+      final updatedPost = Post(
+        id: post.id,
+        authorStudentId: post.authorStudentId,
+        type: post.type,
+        media: post.media,
+        text: post.text,
+        visibility: post.visibility,
+        tags: post.tags,
+        likesCount: post.likesCount,
+        commentsCount: commentsCount,
+        createdAt: post.createdAt,
+        author: post.author,
+      );
+      _posts[postIndex] = updatedPost;
+      notifyListeners();
+    }
+  }
 
   /// Load initial posts
   Future<void> loadInitialPosts() async {
@@ -186,6 +276,9 @@ class FeedProvider extends ChangeNotifier {
 
   /// Reset feed state
   void reset() {
+    // Clear real-time callbacks
+    _realtimeProvider.clearCallbacks();
+    
     _posts.clear();
     _nextCursor = null;
     _hasMore = true;

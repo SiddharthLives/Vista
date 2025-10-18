@@ -1,3 +1,5 @@
+import 'user.dart';
+
 class Conversation {
   final String id;
   final List<String> participants;
@@ -30,37 +32,23 @@ class Conversation {
   }
 }
 
-import 'user.dart';
+class ConversationWithParticipants {
+  final Conversation conversation;
+  final List<User> participants;
 
-class Conversation {
-  final String id;
-  final List<String> participants;
-  final String? lastMessage;
-  final DateTime updatedAt;
-
-  const Conversation({
-    required this.id,
+  const ConversationWithParticipants({
+    required this.conversation,
     required this.participants,
-    this.lastMessage,
-    required this.updatedAt,
   });
 
-  factory Conversation.fromJson(Map<String, dynamic> json) {
-    return Conversation(
-      id: json['_id'] as String,
-      participants: List<String>.from(json['participants'] ?? []),
-      lastMessage: json['lastMessage'] as String?,
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+  factory ConversationWithParticipants.fromJson(Map<String, dynamic> json) {
+    return ConversationWithParticipants(
+      conversation: Conversation.fromJson(json),
+      participants: (json['participantDetails'] as List<dynamic>?)
+              ?.map((item) => User.fromJson(item))
+              .toList() ??
+          [],
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      '_id': id,
-      'participants': participants,
-      'lastMessage': lastMessage,
-      'updatedAt': updatedAt.toIso8601String(),
-    };
   }
 }
 

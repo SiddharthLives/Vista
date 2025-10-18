@@ -151,6 +151,29 @@ class NotificationsApiService {
       );
     }
   }
+
+  /// Register FCM token for push notifications
+  Future<ApiResponse<void>> registerFCMToken(String fcmToken) async {
+    try {
+      final response = await _apiService.post('/notifications/fcm-token', {
+        'fcmToken': fcmToken,
+      });
+
+      if (response.success) {
+        return ApiResponse.success(null, response.data?['message']);
+      } else {
+        return ApiResponse.error(response.error!);
+      }
+    } catch (e, stackTrace) {
+      LoggerService.error('Error registering FCM token', e, stackTrace);
+      return ApiResponse.error(
+        const ApiError(
+          code: 'REGISTER_FCM_TOKEN_ERROR',
+          message: 'Failed to register FCM token',
+        ),
+      );
+    }
+  }
 }
 
 class NotificationsFeedResponse {

@@ -10,10 +10,13 @@ import '../widgets/post_composer.dart';
 import '../widgets/stories_carousel.dart';
 import '../widgets/loading_widget.dart';
 import '../widgets/error_widget.dart';
+import '../widgets/notification_badge.dart';
 import '../models/post.dart';
 
 class HomeFeedScreen extends StatefulWidget {
-  const HomeFeedScreen({super.key});
+  final bool showAppBar;
+  
+  const HomeFeedScreen({super.key, this.showAppBar = true});
 
   @override
   State<HomeFeedScreen> createState() => _HomeFeedScreenState();
@@ -100,11 +103,12 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: widget.showAppBar ? AppBar(
         title: const Text('Vista'),
         centerTitle: true,
         elevation: 0,
         actions: [
+          const NotificationBadge(),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () {
@@ -112,7 +116,7 @@ class _HomeFeedScreenState extends State<HomeFeedScreen> {
             },
           ),
         ],
-      ),
+      ) : null,
       body: Consumer<FeedProvider>(
         builder: (context, feedProvider, child) {
           if (feedProvider.isInitialLoading) {
